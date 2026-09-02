@@ -1,0 +1,41 @@
+# piper-train-config-v2.yaml
+# =====================================================================
+# Ultimate Training Configuration for OHF-Voice/piper1-gpl
+# Model: au_male_57 (Australian Male, non-rhotic transfer learning)
+# Target Platform: Google Colab Free Tier (NVIDIA T4, 15 GB VRAM)
+# =====================================================================
+
+# PyTorch Lightning Trainer Parameters
+trainer:
+  accelerator: "gpu"
+  devices: 1
+  max_epochs: 5000            # Deep training to finalize boundary alignment
+  precision: 16-mixed         # Enables automatic mixed precision (AMP) to save VRAM and speed up T4
+  log_every_n_steps: 10
+  val_check_interval: 1.0     # Run validation every epoch to track val_mel loss
+  enable_checkpointing: true
+  callbacks:
+    - class_path: train_sutta_voice.SuttaVoiceUatCallback
+      init_args:
+        phoneme_map_path: "/content/drive/MyDrive/piper_training/phoneme_map.json"
+        target_global_loss: 0.15
+        tolerance_pct: 0.25
+
+# Dataset and Data Loading Configurations
+data:
+  voice_name: "au_male_57"
+  csv_path: "metadata.csv"     # Standard 2-column: filename.wav|phonemes
+  audio_dir: "wavs/"           # Folder containing 22.05 kHz wav files
+  phoneme_type: "text"         # Crucial: forces training loop to read our pre-phonemized text columns directly (bypassing runtime espeak-ng)
+  phonemes_path: "phoneme_map.json"  # Mapping to target checkpoint's token IDs to avoid [UNK] crashes
+  cache_dir: "/content/piper_cache"  # Fast local caching of spectrogram tensors on Colab SSD
+  batch_size: 32               # Ideal for Medium model on T4. Drop to 16 if CUDA Out-Of-Memory occurs
+  num_workers: 2               # Matches Google Colab's dual-core CPU allocation
+  pin_memory: true             # Speeds up tensor transfers from RAM to GPU VRAM
+
+# Model Hyperparameters
+model:
+  sample_rate: 22050           # 22.05 kHz high-quality audio
+
+# Transfer Learning Base Checkpoint Path
+ckpt_path: "en_GB-northern_english_male-medium.ckpt"  # The non-rhotic baseline closest to Australian phonetics

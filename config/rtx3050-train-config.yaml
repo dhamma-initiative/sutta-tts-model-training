@@ -1,0 +1,31 @@
+# rtx3050-train-config.yaml
+# =====================================================================
+# Sanity Dry-Run Configuration for Local RTX 3050 (4 GB VRAM)
+# Target: Testing Cython compilation, dataset load, and active UAT callbacks
+# =====================================================================
+
+trainer:
+  accelerator: "gpu"
+  devices: 1
+  max_epochs: 5               # Very short run strictly for integration testing
+  precision: "16-mixed"       # Absolute necessity for 4 GB VRAM to utilize Tensor Cores
+  log_every_n_steps: 1
+  val_check_interval: 10      # Run validation every 10 steps to trigger UAT Callback immediately
+  enable_checkpointing: true
+
+data:
+  voice_name: "au_male_57"
+  csv_path: "metadata.csv"
+  audio_dir: "wavs/"
+  phoneme_type: "text"
+  phonemes_path: "phoneme_map.json"
+  cache_dir: "./piper_cache_local"
+  batch_size: 2               # CRUCIAL: Tiny batch size to prevent CUDA OOM on 4 GB VRAM
+  num_workers: 1              # Single-worker thread to minimize memory overhead
+  pin_memory: true
+  preload_dataset: false      # Disable preloading to save local RAM/VRAM
+
+model:
+  sample_rate: 22050
+
+ckpt_path: "en_GB-northern_english_male-medium.ckpt"
