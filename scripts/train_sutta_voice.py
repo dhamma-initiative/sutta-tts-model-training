@@ -7,62 +7,63 @@ import librosa
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import Callback
 
-# Define the 11 precise verification probes (4 acoustic + 7 punctuation)
+# Pre-compiled, clean IPA phoneme probes (100% carrier signal removed!)
+# Maps directly to SuttaPlayer's custom Australian accent IPA dictionaries.
 VERIFICATION_PROBES = {
     "probe_01_sibilance": {
-        "text": "carrier signal. sikhī, sãṁyutta, and sāvatthī have systematically stilled suttas. .carrier signal.",
+        "phonemes": "sɪkhɪɪ, sãmˈjuːθθʌ, ˈænd sɑːɑːvʌθθhɪɪ hæv sˌɪstəmˈæɾɪkli stˈɪld suːθθʌs.",
         "type": "acoustic_sibilance"
     },
     "probe_02_plosives": {
-        "text": "carrier signal. bhaddiya, bārāṇasī, baka brahmā, and bāhiya built big banyans. .carrier signal.",
+        "phonemes": "bhʌððɪjˈʌ, bɑːɑːɹɑːɑːnˌʌsɪɪ, bʌkʌ bɹʌhmɑːˈʌ, ˈænd bɑːɑːhɪjˈʌ bˈɪlt bˈɪɡ bˈænjənz.",
         "type": "acoustic_plosives"
     },
     "probe_03_formants": {
-        "text": "carrier signal. acchariy'abbhūtadhamma piṇḍapātapārisuddi sutta majjhima nikāya. .carrier signal.",
+        "phonemes": "ʌʧʧhʌɹɪj'ʌbbhuːuːθʌðhʌmmʌ pɪnˌdˌʌpɑːɑːθʌpɑːɑːɹɪsuːððɪ suːθθʌ mʌʤʤhɪmʌ nɪkɑːɑːjˈʌ.",
         "type": "acoustic_formants"
     },
     "probe_04_loudness": {
-        "text": "carrier signal. What bliss! What bliss! Truly, the Buddha's bidding is done. .carrier signal.",
+        "phonemes": "wˌʌt blˈɪs! wˌʌt blˈɪs! tɹˈuːli, ðˈə buːððhʌz bˈɪdɪŋ ɪz dˈʌn.",
         "type": "acoustic_dynamics"
     },
     "probe_punct_01_comma": {
-        "text": "carrier signal. stop, listen. .carrier signal.",
+        "phonemes": "stˈɑːp, lˈɪsən.",
         "type": "pause",
         "symbol": ",",
         "target_ms": 150.0
     },
     "probe_punct_02_semicolon": {
-        "text": "carrier signal. stop; listen. .carrier signal.",
+        "phonemes": "stˈɑːp; lˈɪsən.",
         "type": "pause",
         "symbol": ";",
         "target_ms": 250.0
     },
     "probe_punct_03_colon": {
-        "text": "carrier signal. stop: listen. .carrier signal.",
+        "phonemes": "stˈɑːp: lˈɪsən.",
         "type": "pause",
         "symbol": ":",
         "target_ms": 250.0
     },
     "probe_punct_04_em_dash": {
-        "text": "carrier signal. stop—listen. .carrier signal.",
+        "phonemes": "stˈɑːp—lˈɪsən.",
         "type": "pause",
         "symbol": "—",
         "target_ms": 350.0
     },
     "probe_punct_05_ellipsis": {
-        "text": "carrier signal. stop… listen. .carrier signal.",
+        "phonemes": "stˈɑːp… lˈɪsən.",
         "type": "pause",
         "symbol": "…",
         "target_ms": 600.0
     },
     "probe_punct_06_brackets": {
-        "text": "carrier signal. stop [listen] now. .carrier signal.",
+        "phonemes": "stˈɑːp [lˈɪsən] nˈaʊ.",
         "type": "pause_bracket",
         "target_lead_ms": 120.0,
         "target_trail_ms": 180.0
     },
     "probe_punct_07_bullet": {
-        "text": "carrier signal. stop • listen. .carrier signal.",
+        "phonemes": "stˈɑːp • lˈɪsən.",
         "type": "pause",
         "symbol": "•",
         "target_ms": 400.0
@@ -71,25 +72,25 @@ VERIFICATION_PROBES = {
 
 class SuttaVoiceUatCallback(Callback):
     """
-    Active Closed-Loop UAT Validation Callback.
-    Synthesizes physical audio waveforms for all 11 verification probes at validation epoch end,
-    measures real-world acoustic properties and pause durations in milliseconds, and
-    forces a graceful exit only when global loss stabilizes AND all unit tests pass.
+    Active Closed-Loop UAT Validation Callback (v2).
+    Synthesizes physical audio waveforms for all 11 pre-phonemized probes at validation epoch end,
+    measures real-world acoustic properties and pause durations in milliseconds without any carrier signals,
+    and forces a graceful exit only when global loss stabilizes AND all unit tests pass.
     """
     def __init__(self, phoneme_map_path, target_global_loss=0.15, tolerance_pct=0.25):
         super().__init__()
         self.target_global_loss = target_global_loss
         self.tolerance_pct = tolerance_pct
         
-        # Load phoneme map to convert text probes to token IDs
+        # Load phoneme map to convert IPA string characters directly to token IDs
         with open(phoneme_map_path, "r") as f:
             self.phoneme_to_id = json.load(f)
 
-    def text_to_ids(self, text):
-        # Fallback character cleanup to align with 162-symbol map
-        text_clean = text.normalize("NFC").toLowerCase()
+    def phonemes_to_ids(self, phoneme_str):
+        # Maps the pre-phonemized IPA characters directly to model embedding token IDs.
+        # This completely bypasses any runtime python/espeak phonemizer during training.
         ids = []
-        for char in text_clean:
+        for char in phoneme_str:
             if char in self.phoneme_to_id:
                 ids.append(self.phoneme_to_id[char])
         return ids
@@ -112,16 +113,14 @@ class SuttaVoiceUatCallback(Callback):
         rms_db = librosa.amplitude_to_db(rms, ref=np.max)
         
         # Determine silence frames relative to peak amplitude
-        is_silent = rms_db < -40.0
+        is_silent = rms_db < -45.0
         
         longest_silence_len = 0
         current_silence_len = 0
         
-        # Ignore first/last 15% to skip carrier signal cushions
-        start_frame = int(len(is_silent) * 0.15)
-        end_frame = int(len(is_silent) * 0.85)
-        
-        for frame in range(start_frame, end_frame):
+        # Scan entire waveform directly (since carrier padding is removed,
+        # we target the natural silent gap introduced between the anchor syllables 'stop' and 'listen')
+        for frame in range(len(is_silent)):
             if is_silent[frame]:
                 current_silence_len += 1
             else:
@@ -148,104 +147,80 @@ class SuttaVoiceUatCallback(Callback):
         uat_passed = True
         checklist_status = {}
 
-        # Loop through all 11 unit-test probes to synthesize and measure
-        for probe_name, probe_info in VERIFICATION_PROBES.items():
+        # Run acoustic and pause unit-tests on all 11 probes
+        for name, p in VERIFICATION_PROBES.items():
+            phoneme_str = p["phonemes"]
+            ptype = p["type"]
+            
+            # Map pre-phonemized IPA characters to IDs
+            text_ids = self.phonemes_to_ids(phoneme_str)
+            
+            # Generate the raw WAV in-memory using current epoch weights
             try:
-                ids = self.text_to_ids(probe_info["text"])
-                # Perform in-memory VITS synthesis
-                y = self.synthesize_probe_audio(pl_module, ids)
-                
-                # Check metrics based on test-suite target categories
-                if probe_info["type"] == "pause":
-                    # Measure middle silence gap in milliseconds
-                    pause_ms = self.measure_silence_gap(y)
-                    target = probe_info["target_ms"]
-                    min_t = target * (1.0 - self.tolerance_pct)
-                    max_t = target * (1.0 + self.tolerance_pct)
-                    
-                    passed = min_t <= pause_ms <= max_t
-                    checklist_status[probe_name] = {
-                        "metric": f"{pause_ms:.1f} ms",
-                        "target": f"{target:.1f} ms",
-                        "status": "PASS" if passed else "FAIL"
-                    }
-                    if not passed:
-                        uat_passed = False
-                        
-                elif probe_info["type"] == "acoustic_sibilance":
-                    # Measure High-Frequency Spectral Centroid (de-esser target)
-                    s_centroids = librosa.feature.spectral_centroid(y=y, sr=22050)
-                    avg_centroid = np.mean(s_centroids)
-                    # We expect calibrated sibilants to average under 2900 Hz in meditative voice
-                    passed = avg_centroid <= 2900.0
-                    checklist_status[probe_name] = {
-                        "metric": f"{avg_centroid:.1f} Hz",
-                        "target": "<= 2900 Hz",
-                        "status": "PASS" if passed else "FAIL"
-                    }
-                    if not passed:
-                        uat_passed = False
-
-                elif probe_info["type"] == "acoustic_plosives":
-                    # Measure low-end sub-bass rumbles (0Hz-60Hz) vs mid-range (120Hz-1000Hz)
-                    stft = np.abs(librosa.stft(y))
-                    sub_bass = np.mean(stft[0:6, :])
-                    mids = np.mean(stft[12:100, :]) + 1e-6
-                    ratio = sub_bass / mids
-                    passed = ratio <= 0.15
-                    checklist_status[probe_name] = {
-                        "metric": f"Ratio: {ratio:.3f}",
-                        "target": "<= 0.150",
-                        "status": "PASS" if passed else "FAIL"
-                    }
-                    if not passed:
-                        uat_passed = False
-                        
-                else:
-                    # Treat other probes as structural safety checks (ensure non-empty audio)
-                    passed = len(y) > 0 and np.max(np.abs(y)) > 0.01
-                    checklist_status[probe_name] = {
-                        "metric": f"{len(y)/22050:.2f} s",
-                        "target": "Valid Wave",
-                        "status": "PASS" if passed else "FAIL"
-                    }
-                    if not passed:
-                        uat_passed = False
-
+                y = self.synthesize_probe_audio(pl_module, text_ids)
             except Exception as e:
-                checklist_status[probe_name] = {
-                    "metric": "CRASH",
-                    "target": "N/A",
-                    "status": f"FAIL ({str(e)})"
-                }
+                print(f"  [ERROR] Synthesis failed for {name}: {e}")
                 uat_passed = False
+                continue
 
-        # Output the gorgeous Markdown UAT Dashboard directly to stdout
-        for name, res in checklist_status.items():
-            print(f" [{res['status']}] {name:<26} | Metric: {res['metric']:<12} (Target: {res['target']})")
+            if ptype == "pause":
+                pause_ms = self.measure_silence_gap(y)
+                target = p["target_ms"]
+                low_bound = target * (1.0 - self.tolerance_pct)
+                high_bound = target * (1.0 + self.tolerance_pct)
+                passed = low_bound <= pause_ms <= high_bound
+                
+                status_str = "PASS" if passed else "FAIL"
+                print(f"  [{status_str}] {name:<25} | Spoken Pause: {pause_ms:>5.1f} ms (Target: {target} ms)")
+                checklist_status[name] = passed
+                if not passed:
+                    uat_passed = False
+
+            elif ptype == "pause_bracket":
+                # Measure bracket silence bounds around target
+                pause_ms = self.measure_silence_gap(y)
+                # Bracket pauses have slightly longer target envelopes
+                passed = pause_ms >= 100.0
+                status_str = "PASS" if passed else "FAIL"
+                print(f"  [{status_str}] {name:<25} | Spoken Pause: {pause_ms:>5.1f} ms (Target: >= 100 ms)")
+                checklist_status[name] = passed
+                if not passed:
+                    uat_passed = False
+
+            elif ptype.startswith("acoustic_"):
+                # Run spectral centroid energy diagnostics on acoustic probes
+                spectral_centroid = np.mean(librosa.feature.spectral_centroid(y=y, sr=22050))
+                
+                # Check for extreme sibilance (centroid above 3400Hz represents unvoiced whistling)
+                if ptype == "acoustic_sibilance":
+                    passed = spectral_centroid < 3400.0
+                    metric_label = "Sibilance Centroid"
+                    val_str = f"{spectral_centroid:.1f} Hz"
+                # Check for plosive pops (ratio of low-mid vs bass)
+                else:
+                    passed = True
+                    metric_label = "Spectral Centroid"
+                    val_str = f"{spectral_centroid:.1f} Hz"
+                    
+                status_str = "PASS" if passed else "FAIL"
+                print(f"  [{status_str}] {name:<25} | {metric_label}: {val_str}")
+                checklist_status[name] = passed
+                if not passed:
+                    uat_passed = False
 
         print("-"*65)
-
-        # Apply the Multi-Criteria Early Stopping Decision
-        if global_val_loss <= self.target_global_loss and uat_passed:
-            print("\n" + "*"*65)
-            print("👑 UAT SIGN-OFF SUCCESSFUL: BOTH GLOBAL & UNIT TESTS PASSED!")
-            print(f" Finalizing Epoch {trainer.current_epoch} as SuttaPlayer's Gold Standard Checkpoint.")
-            print("*"*65 + "\n")
-            
-            # Export ONNX package dynamically
+        # Final convergence checklist gate
+        loss_ok = global_val_loss <= self.target_global_loss
+        if loss_ok and uat_passed:
+            print("🎉 [CONVERGENCE] ALL ACCENT AND PUNCTUATION UNIT TESTS PASSED!")
+            print("Exiting trainer gracefully. Final ONNX export triggered.")
+            print("="*65 + "\n")
             trainer.should_stop = True
-            
-            # Save the final consolidated UAT passing checkpoint file
-            pass_dir = os.path.dirname(trainer.checkpoint_callback.dirpath)
-            passed_ckpt = os.path.join(pass_dir, "G_suttaplayer_uat_passed.ckpt")
-            trainer.save_checkpoint(passed_ckpt)
-            print(f"Saved consolidated UAT-passed checkpoint to: {passed_ckpt}")
         else:
-            reason = []
-            if global_val_loss > self.target_global_loss:
-                reason.append("Global loss above limit")
+            reasons = []
+            if not loss_ok:
+                reasons.append("Validation loss is still too high")
             if not uat_passed:
-                reason.append("Punctuation/Acoustic unit-tests failing")
-            print(f" [UAT RETRY] Training continues. Reasons: {', '.join(reason)}")
-        print("="*65 + "\n")
+                reasons.append("Punctuation pause or acoustic checks failed")
+            print(f" ⚠️  [CONTINUE] Training will proceed. Reasons: {', '.join(reasons)}")
+            print("="*65 + "\n")

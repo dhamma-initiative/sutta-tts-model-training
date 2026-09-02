@@ -10,3 +10,16 @@
 coverage/
 *.lcov
 .venv*
+
+# Python Caches
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Deno & Micromamba system artifacts
+bin/
+piper_cache/
+piper_cache_local/
+lightning_logs/
