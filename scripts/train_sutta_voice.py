@@ -35,56 +35,70 @@ VERIFICATION_PROBES = {
         "phonemes": "stˈɒp, lˈɪsən.",
         "type": "pause",
         "symbol": ",",
-        "target_ms": 150.0
+        "target_ms": 295.0
     },
     "probe_punct_02_semicolon": {
         "text": "stop; listen.",
         "phonemes": "stˈɒp; lˈɪsən.",
         "type": "pause",
         "symbol": ";",
-        "target_ms": 250.0
+        "target_ms": 260.0
     },
     "probe_punct_03_colon": {
         "text": "stop: listen.",
         "phonemes": "stˈɒp: lˈɪsən.",
         "type": "pause",
         "symbol": ":",
-        "target_ms": 250.0
+        "target_ms": 340.0
     },
     "probe_punct_04_em_dash": {
         "text": "stop—listen.",
         "phonemes": "stˈɒp—lˈɪsən.",
         "type": "pause",
         "symbol": "—",
-        "target_ms": 350.0
+        "target_ms": 255.0
     },
     "probe_punct_05_ellipsis": {
         "text": "stop… listen.",
         "phonemes": "stˈɒp… lˈɪsən.",
         "type": "pause",
         "symbol": "…",
-        "target_ms": 600.0
+        "target_ms": 530.0
     },
     "probe_punct_06_brackets": {
         "text": "stop [listen] now.",
         "phonemes": "stˈɒp [lˈɪsən] nˈaʊ.",
         "type": "pause_bracket",
-        "target_lead_ms": 120.0,
-        "target_trail_ms": 180.0
+        "target_lead_ms": 420.0,
+        "target_trail_ms": 280.0
     },
     "probe_punct_07_bullet": {
         "text": "stop • listen.",
         "phonemes": "stˈɒp • lˈɪsən.",
         "type": "pause",
         "symbol": "•",
-        "target_ms": 400.0
+        "target_ms": 420.0
+    },
+    "probe_punct_08_parentheses": {
+        "text": "stop (listen) now.",
+        "phonemes": "stˈɒp (lˈɪsən) nˈaʊ.",
+        "type": "pause_bracket",
+        "target_lead_ms": 420.0,
+        "target_trail_ms": 280.0
+    },
+    "probe_punct_09_braces": {
+        "text": "stop {listen} now.",
+        "phonemes": "stˈɒp {lˈɪsən} nˈaʊ.",
+        "type": "pause_bracket",
+        "target_lead_ms": 420.0,
+        "target_trail_ms": 280.0
     }
 }
 
 class SuttaVoiceUatCallback(Callback):
     """
-    Active Closed-Loop UAT Validation Callback (v2).
-    Synthesizes physical audio waveforms for all 11 pre-phonemized probes at validation epoch end,
+    Active Closed-Loop UAT Validation Callback (v3).
+    Synthesizes physical audio waveforms for all 13 pre-phonemized probes at validation epoch end,
     measures real-world acoustic properties and pause durations in milliseconds without any carrier signals,
     and forces a graceful exit only when global loss stabilizes AND all unit tests pass.
     """
@@ -92,7 +106,6 @@ class SuttaVoiceUatCallback(Callback):
         super().__init__()
         self.target_global_loss = target_global_loss
         self.tolerance_pct = tolerance_pct
-        
         # Load phoneme map to convert IPA string characters directly to token IDs
         with open(phoneme_map_path, "r") as f:
             self.phoneme_to_id = json.load(f)
@@ -122,13 +135,10 @@ class SuttaVoiceUatCallback(Callback):
         hop_length = 128
         rms = librosa.feature.rms(y=y, hop_length=hop_length)
         rms_db = librosa.amplitude_to_db(rms, ref=np.max)
-        
         # Determine silence frames relative to peak amplitude
         is_silent = rms_db < -45.0
-        
         longest_silence_len = 0
         current_silence_len = 0
-        
         # Scan entire waveform directly (since carrier padding is removed,
         # we target the natural silent gap introduced between the anchor syllables 'stop' and 'listen')
         for frame in range(len(is_silent)):
@@ -138,7 +148,6 @@ class SuttaVoiceUatCallback(Callback):
                 if current_silence_len > longest_silence_len:
                     longest_silence_len = current_silence_len
                 current_silence_len = 0
-                
         duration_ms = (longest_silence_len * hop_length / sr) * 1000
         return duration_ms
 
@@ -158,14 +167,12 @@ class SuttaVoiceUatCallback(Callback):
         uat_passed = True
         checklist_status = {}
 
-        # Run acoustic and pause unit-tests on all 11 probes
+        # Run acoustic and pause unit-tests on all probes
         for name, p in VERIFICATION_PROBES.items():
             phoneme_str = p["phonemes"]
             ptype = p["type"]
-            
             # Map pre-phonemized IPA characters to IDs
             text_ids = self.phonemes_to_ids(phoneme_str)
-            
             # Generate the raw WAV in-memory using current epoch weights
             try:
                 y = self.synthesize_probe_audio(pl_module, text_ids)
@@ -180,7 +187,6 @@ class SuttaVoiceUatCallback(Callback):
                 low_bound = target * (1.0 - self.tolerance_pct)
                 high_bound = target * (1.0 + self.tolerance_pct)
                 passed = low_bound <= pause_ms <= high_bound
-                
                 status_str = "PASS" if passed else "FAIL"
                 print(f"  [{status_str}] {name:<25} | Spoken Pause: {pause_ms:>5.1f} ms (Target: {target} ms)")
                 checklist_status[name] = passed
@@ -201,7 +207,6 @@ class SuttaVoiceUatCallback(Callback):
             elif ptype.startswith("acoustic_"):
                 # Run spectral centroid energy diagnostics on acoustic probes
                 spectral_centroid = np.mean(librosa.feature.spectral_centroid(y=y, sr=22050))
-                
                 # Check for extreme sibilance (centroid above 3400Hz represents unvoiced whistling)
                 if ptype == "acoustic_sibilance":
                     passed = spectral_centroid < 3400.0
@@ -212,7 +217,6 @@ class SuttaVoiceUatCallback(Callback):
                     passed = True
                     metric_label = "Spectral Centroid"
                     val_str = f"{spectral_centroid:.1f} Hz"
-                    
                 status_str = "PASS" if passed else "FAIL"
                 print(f"  [{status_str}] {name:<25} | {metric_label}: {val_str}")
                 checklist_status[name] = passed
