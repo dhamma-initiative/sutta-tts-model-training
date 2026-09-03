@@ -1,0 +1,19 @@
+====================================================
+    SUTTAPLAYER PHONEME ID MAP COMPLIANCE AUDITOR   
+====================================================
+
+📂 Loading audit resources...
+  ✅ Phoneme ID Map loaded: 160 symbols.
+  ✅ English IPA Dictionary loaded: 10629 words.
+  ✅ Pali IPA Dictionary loaded: 1763 terms.
+  ✅ Characterset Report loaded: 103 unique characters.
+
+🔍 Auditing English Dictionary IPA symbol coverage...
+🔍 Auditing Pali Dictionary IPA symbol coverage...
+🔍 Auditing Sutta persistent punctuation coverage...
+====================================================
+🎉 SUCCESS: YOUR PHONEME MAP IS 100% COMPLIANT!
+====================================================
+  No missing IPA symbols or punctuation tokens detected.
+  The training config is secured against [UNK] token crashes.
+====================================================

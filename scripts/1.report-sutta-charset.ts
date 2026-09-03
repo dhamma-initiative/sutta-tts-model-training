@@ -1,81 +1,152 @@
-// analyze_chars.ts
-// Run with: deno run --allow-read analyze_chars.ts <filename>
+// scripts/1.report-sutta-charset.ts
+import { expandGlob } from "jsr:@std/fs/expand-glob";
+import { join, basename } from "jsr:@std/path";
+import { parseArgs } from "jsr:@std/cli/parse-args";
 
-import { exists } from "https://deno.land/std@0.192.0/fs/exists.ts";
-
-const filename = Deno.args[0];
-
-if (!filename) {
-  console.error("Usage: deno run --allow-read analyze-sutta-chars <file.txt>");
-  Deno.exit(1);
+interface CharInfo {
+  char: string;
+  codePoint: string;
+  count: number;
+  categories: string[];
 }
 
-if (!await exists(filename)) {
-  console.error(`File not found: ${filename}`);
-  Deno.exit(1);
+function getCharCategory(char: string): string {
+  const code = char.charCodeAt(0);
+  if (code >= 0x0000 && code <= 0x001F) return "Control Character";
+  if (char === " " || char === "\r" || char === "\n" || char === "\t") return "Whitespace";
+  if (/[0-9]/.test(char)) return "Numeric";
+  if (/[\p{P}]/u.test(char)) return "Punctuation";
+  if (/[\p{S}]/u.test(char)) return "Symbol";
+  if (/[\p{L}]/u.test(char)) return "Letter";
+  return "Other";
 }
 
-const text = await Deno.readTextFile(filename);
+async function main() {
+  const flags = parseArgs(Deno.args, {
+    string: ["input", "output", "json"],
+    alias: { i: "input", o: "output", j: "json" },
+    default: {
+      input: "text/sutta-books",
+      output: "config/ALL-suttas-text-characterset-report.md",
+      json: "config/ALL-suttas-text-characterset-report.json"
+    }
+  });
 
-// Use a Set to store unique characters
-const uniqueChars = new Set<string>();
-const charCounts = new Map<string, number>();
+  const inputDir = flags.input;
+  const mdPath = flags.output;
+  const jsonPath = flags.json;
 
-// Iterate over the string. JavaScript/TypeScript iterates by UTF-16 code units,
-// but for most common Pali/Sanskrit chars this works. 
-// For full grapheme cluster support, we'd need a library like 'grapheme-splitter',
-// but simple iteration usually suffices for identifying the set.
-// To be strictly safe with combining marks, we normalize first.
-const normalizedText = text.normalize('NFC');
+  console.log(`📊 Scanning Sutta Sourced Directory: ${inputDir}`);
+  const charMap = new Map<string, number>();
+  let totalChars = 0;
+  let fileCount = 0;
 
-for (const char of normalizedText) {
-  if (!uniqueChars.has(char)) {
-    uniqueChars.add(char);
-    charCounts.set(char, 1);
-  } else {
-    charCounts.set(char, (charCounts.get(char) || 0) + 1);
+  for await (const file of expandGlob(join(inputDir, "*.txt"))) {
+    fileCount++;
+    console.log(`  -> Reading file: ${basename(file.path)}`);
+    const text = await Deno.readTextFile(file.path);
+    const normalized = text.normalize("NFC");
+    for (const char of normalized) {
+      charMap.set(char, (charMap.get(char) || 0) + 1);
+      totalChars++;
+    }
   }
-}
 
-// Convert to array and sort by code point
-const sortedChars = Array.from(uniqueChars).sort((a, b) => a.codePointAt(0)! - b.codePointAt(0)!);
-
-console.log(`\nTotal unique characters found: ${sortedChars.length}\n`);
-console.log("Char | Code Point | Name | Category | Count");
-console.log("-----|------------|------|----------|------");
-
-for (const char of sortedChars) {
-  const code = char.codePointAt(0)!;
-  const hex = "U+" + code.toString(16).toUpperCase().padStart(4, '0');
-  
-  // Determine category
-  let category = "Other";
-  if (/\s/.test(char)) category = "Whitespace";
-  else if (/\p{P}/u.test(char)) category = "Punctuation";
-  else if (/\p{L}/u.test(char)) category = "Letter";
-  else if (/\p{N}/u.test(char)) category = "Number";
-  else if (/\p{C}/u.test(char)) category = "Control/Invisible";
-
-  // Get character name (basic implementation, Deno doesn't have built-in charnames)
-  // We will just display the hex for precision
-  const name = "See Unicode Table"; 
-
-  // Display representation
-  const display = char === ' ' ? 'SPACE' : char === '\n' ? 'LF' : char === '\t' ? 'TAB' : char === '\r' ? 'CR' : char;
-
-  console.log(`${display.padEnd(4)} | ${hex} | ${name.padEnd(15)} | ${category.padEnd(8)} | ${charCounts.get(char)}`);
-}
-
-// Specific report on potential problem characters
-console.log("\n--- Potential Issues (Whitespace & Punctuation) ---");
-const issues = sortedChars.filter(c => /\s/.test(c) || /\p{P}/u.test(c));
-if (issues.length === 0) {
-  console.log("No special whitespace or punctuation issues detected.");
-} else {
-  for (const char of issues) {
-    const code = char.codePointAt(0)!;
-    const hex = "U+" + code.toString(16).toUpperCase().padStart(4, '0');
-    const display = char === ' ' ? 'SPACE' : char === '\n' ? 'LF' : char === '\t' ? 'TAB' : char === '\r' ? 'CR' : char;
-    console.log(`Found: '${display}' (${hex})`);
+  if (fileCount === 0) {
+    console.error(`❌ Error: No text files found in ${inputDir}`);
+    Deno.exit(1);
   }
-}   
+
+  // Compile individual character profiles
+  const characters: CharInfo[] = [];
+  for (const [char, count] of charMap.entries()) {
+    const codePoint = `U+${char.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}`;
+    const category = getCharCategory(char);
+    characters.push({
+      char,
+      codePoint,
+      count,
+      categories: [category]
+    });
+  }
+
+  // Sort by count descending
+  characters.sort((a, b) => b.count - a.count);
+
+  // Separate into Logical Subgroups for MD Report
+  const letters = characters.filter(c => c.categories.includes("Letter"));
+  const punctuation = characters.filter(c => c.categories.includes("Punctuation") || c.categories.includes("Symbol"));
+  const whitespace = characters.filter(c => c.categories.includes("Whitespace") || c.categories.includes("Control Character"));
+
+  // 1. Write structured JSON Manifest
+  const jsonReport = {
+    metadata: {
+      total_characters_scanned: totalChars,
+      unique_character_count: characters.length,
+      scanned_directory: inputDir,
+      timestamp: new Date().toISOString()
+    },
+    characters: characters.map(c => ({
+      char: c.char,
+      code_point: c.codePoint,
+      count: c.count,
+      category: c.categories[0]
+    }))
+  };
+
+  await Deno.mkdir(join(jsonPath, ".."), { recursive: true }).catch(() => {});
+  await Deno.writeTextFile(jsonPath, JSON.stringify(jsonReport, null, 2));
+  console.log(`✅ Structured JSON Character Set Manifest written to: ${jsonPath}`);
+
+  // 2. Write Beautiful Human-Readable MD Report
+  const mdLines: string[] = [
+    `# Sutta Text Corpus Character Set Audit Report`,
+    `Generated on: ${new Date().toLocaleDateString()} | Scanned Directory: \`${inputDir}\``,
+    `\n## Executive Summary`,
+    `*   **Total Characters Scanned:** ${totalChars.toLocaleString()}`,
+    `*   **Unique Symbols Found:** ${characters.length}`,
+    `*   **Structured Metadata Source:** \`${basename(jsonPath)}\``,
+    `\n## 1. Letters & Diacritics (Count: ${letters.length})`,
+    `| Character | Unicode Code Point | Occurrence Count |`,
+    `| :---: | :--- | :--- |`
+  ];
+
+  for (const c of letters) {
+    mdLines.push(`| **${c.char}** | \`${c.codePoint}\` | ${c.count.toLocaleString()} |`);
+  }
+
+  mdLines.push(
+    `\n## 2. Persistent Punctuation & Boundary Symbols (Count: ${punctuation.length})`,
+    `*These markers must have dedicated representations in the SuttaPlayer phoneme map to ensure appropriate pauses.*`,
+    `\n| Character | Unicode Code Point | Occurrence Count | Description / Role |`,
+    `| :---: | :--- | :--- | :--- |`
+  );
+
+  for (const c of punctuation) {
+    let desc = "Punctuation Mark";
+    if (c.char === "…") desc = "Ellipsis (Long Pause)";
+    else if (c.char === "—" || c.char === "–") desc = "Em/En Dash (Boundary Pause)";
+    else if (c.char === "[" || c.char === "]") desc = "Brackets (Acoustic Side-Pause)";
+    else if (c.char === "•") desc = "Bullet Point (Segment Marker)";
+    mdLines.push(`| **${c.char}** | \`${c.codePoint}\` | ${c.count.toLocaleString()} | ${desc} |`);
+  }
+
+  mdLines.push(
+    `\n## 3. Whitespace & Control Characters (Count: ${whitespace.length})`,
+    `| Character Escape | Unicode Code Point | Occurrence Count | Category |`,
+    `| :---: | :--- | :--- | :--- |`
+  );
+
+  for (const c of whitespace) {
+    const displayChar = c.char === " " ? "SPACE" : c.char === "\n" ? "LF (\\n)" : c.char === "\r" ? "CR (\\r)" : "CONTROL";
+    mdLines.push(`| \`${displayChar}\` | \`${c.codePoint}\` | ${c.count.toLocaleString()} | ${c.categories[0]} |`);
+  }
+
+  await Deno.mkdir(join(mdPath, ".."), { recursive: true }).catch(() => {});
+  await Deno.writeTextFile(mdPath, mdLines.join("\n"));
+  console.log(`✅ Human-readable Markdown Audit Report written to: ${mdPath}`);
+}
+
+if (import.meta.main) {
+  main();
+}
