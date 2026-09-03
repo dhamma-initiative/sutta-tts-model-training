@@ -1,4 +1,4 @@
-// sutta-training-manager-v3.ts
+// sutta-training-manager-v4.ts
 import { ensureDir } from "jsr:@std/fs/ensure-dir";
 import { join, basename } from "jsr:@std/path";
 
@@ -51,28 +51,26 @@ async function installSystemTools() {
 }
 
 async function installPythonEnv() {
-  console.log("🐍 Setting up Python 3.8.18 Sandboxed environment via micromamba...");
+  console.log("🐍 Setting up Python 3.11.9 Sandboxed environment via micromamba...");
   
   // Download and unpack micromamba
   const mambaExist = await Deno.stat("bin/micromamba").then(() => true).catch(() => false);
   if (!mambaExist) {
     console.log("Downloading micromamba...");
-    const cmd = new Deno.Command("sh", {
-      args: ["-c", "curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj bin/micromamba"]
-    });
+    const cmd = new Deno.Command("sh", {\n      args: ["-c", "curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj bin/micromamba"]\n    });
     await cmd.output();
   }
 
   // Create environment
-  const envExist = await Deno.stat("/root/micromamba/envs/py38").then(() => true).catch(() => false);
+  const envExist = await Deno.stat("/root/micromamba/envs/py311").then(() => true).catch(() => false);
   if (!envExist) {
-    console.log("Creating virtual Python environment 'py38'...");
+    console.log("Creating virtual Python environment 'py311'...");
     await runCmd("./bin/micromamba", [
       "create",
       "-y",
       "-r", "/root/micromamba",
-      "-n", "py38",
-      "python=3.8.18",
+      "-n", "py311",
+      "python=3.11.9",
       "pip",
       "-c", "conda-forge"
     ]);
@@ -94,7 +92,7 @@ async function cloneRepo() {
   const pipInstall = [
     "run",
     "-r", "/root/micromamba",
-    "-n", "py38",
+    "-n", "py311",
     "pip", "install",
     "torch==2.3.1",
     "onnx==1.15.0",
@@ -113,7 +111,7 @@ async function cloneRepo() {
     const buildAlign = [
       "run",
       "-r", "/root/micromamba",
-      "-n", "py38",
+      "-n", "py311",
       "bash", "build_monotonic_align.sh"
     ];
     await runCmd("./bin/micromamba", buildAlign, { cwd: repoDir });
@@ -124,7 +122,7 @@ async function cloneRepo() {
       const fallbackBuild = [
         "run",
         "-r", "/root/micromamba",
-        "-n", "py38",
+        "-n", "py311",
         "python3", "setup.py", "build_ext", "--inplace"
       ];
       await runCmd("./bin/micromamba", fallbackBuild, { cwd: join(repoDir, "src", "python") });
@@ -171,16 +169,16 @@ async function startTrainingSession() {
   const trainingCmdScript = `#!/bin/bash
 cd /content/piper1-gpl
 # Inject custom train_sutta_voice callback inside command line arguments automatically 
-/content/bin/micromamba run -r /root/micromamba -n py38 python3 -m piper.train fit \\
-  --config ${CONFIG_YAML} \\
-  --data.voice_name=au_male_57 \\
-  --data.csv_path=${METADATA_CSV} \\
-  --data.audio_dir=${AUDIO_DIR} \\
-  --data.phoneme_type=text \\
-  --data.phonemes_path=${PHONEME_MAP} \\
-  --data.cache_dir=${LOCAL_CACHE} \\
-  --data.batch_size=32 \\
-  --model.sample_rate=22050 \\
+/content/bin/micromamba run -r /root/micromamba -n py311 python3 -m piper.train fit \\\\
+  --config ${CONFIG_YAML} \\\\
+  --data.voice_name=au_male_57 \\\\
+  --data.csv_path=${METADATA_CSV} \\\\
+  --data.audio_dir=${AUDIO_DIR} \\\\
+  --data.phoneme_type=text \\\\
+  --data.phonemes_path=${PHONEME_MAP} \\\\
+  --data.cache_dir=${LOCAL_CACHE} \\\\
+  --data.batch_size=32 \\\\
+  --model.sample_rate=22050 \\\\
   --ckpt_path=${BASE_CKPT}
 `;
 
@@ -247,7 +245,7 @@ function startKeepAliveLoop() {
       const fileInfo = await Deno.stat(latestMetricFile);
       if (fileInfo.isFile) {
         const text = await Deno.readTextFile(latestMetricFile);
-        const lines = text.trim().split("\\n");
+        const lines = text.trim().split("\n");
         if (lines.length > 1) {
           metricsLog = ` | Last Metrics: \${lines[lines.length - 1]}`;
         }
@@ -273,8 +271,8 @@ async function runPipeline() {
     monitorCheckpoints();
     startKeepAliveLoop();
   } else {
-    console.log("SuttaPlayer Training Manager (v3)");
-    console.log("Usage: deno run --allow-all sutta-training-manager-v3.ts [--init | --train | --monitor]");
+    console.log("SuttaPlayer Training Manager (v4)");
+    console.log("Usage: deno run --allow-all sutta-training-manager-v4.ts [--init | --train | --monitor]");
   }
 }
 

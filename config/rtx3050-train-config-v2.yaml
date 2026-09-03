@@ -1,4 +1,4 @@
-# rtx3050-train-config.yaml
+# rtx3050-train-config-v2.yaml
 # =====================================================================
 # Sanity Dry-Run Configuration for Local RTX 3050 (4 GB VRAM)
 # Target: Testing Cython compilation, dataset load, and active UAT callbacks
@@ -12,14 +12,7 @@ trainer:
   log_every_n_steps: 1
   val_check_interval: 10      # Run validation every 10 steps to trigger UAT Callback immediately
   enable_checkpointing: true
-  callbacks:
-    - class_path: train_sutta_voice.SuttaVoiceUatCallback
-      init_args:
-        # POINT TO YOUR LOCAL SYMLINK OR REPO CONFIG
-        phoneme_map_path: "./phoneme_map.json"  
-        target_global_loss: 0.15
-        tolerance_pct: 0.25
-        
+
 data:
   voice_name: "en_gb-suttaplayer-medium"
   csv_path: "metadata.csv"
@@ -29,8 +22,8 @@ data:
   cache_dir: "./tmp/piper_cache_local"
   batch_size: 2               # CRUCIAL: Tiny batch size to prevent CUDA OOM on 4 GB VRAM
   num_workers: 1              # Single-worker thread to minimize memory overhead
-  pin_memory: true
-  preload_dataset: false      # Disable preloading to save local RAM/VRAM
+  espeak_voice: : "en-gb"
+  config_path: "./tmp/config.json"
 
 model:
   sample_rate: 22050

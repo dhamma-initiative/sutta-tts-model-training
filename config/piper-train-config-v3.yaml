@@ -1,4 +1,4 @@
-# piper-train-config-v2.yaml
+# piper-train-config-v3.yaml
 # =====================================================================
 # Ultimate Training Configuration for OHF-Voice/piper1-gpl
 # Model: au_male_57 (Australian Male, non-rhotic transfer learning)
@@ -23,7 +23,7 @@ trainer:
 
 # Dataset and Data Loading Configurations
 data:
-  voice_name: "en_gb-suttaplayer-medium"
+  voice_name: "au_male_57"
   csv_path: "metadata.csv"     # Standard 2-column: filename.wav|phonemes
   audio_dir: "wavs/"           # Folder containing 22.05 kHz wav files
   phoneme_type: "text"         # Crucial: forces training loop to read our pre-phonemized text columns directly (bypassing runtime espeak-ng)
@@ -31,7 +31,6 @@ data:
   cache_dir: "/content/piper_cache"  # Fast local caching of spectrogram tensors on Colab SSD
   batch_size: 32               # Ideal for Medium model on T4. Drop to 16 if CUDA Out-Of-Memory occurs
   num_workers: 2               # Matches Google Colab's dual-core CPU allocation
-  pin_memory: true             # Speeds up tensor transfers from RAM to GPU VRAM
 
 # Model Hyperparameters
 model:

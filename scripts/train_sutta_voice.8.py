@@ -4,17 +4,8 @@ import json
 import torch
 import numpy as np
 import librosa
-
-try:
-    import lightning.pytorch as pl
-    from lightning.pytorch.callbacks import Callback
-except ImportError:
-    try:
-        import pytorch_lightning as pl
-        from pytorch_lightning.callbacks import Callback
-    except ImportError:
-        # Final fallback for offline scripts
-        Callback = object
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import Callback
 
 # Define the 13 precise verification probes (4 acoustic + 9 punctuation)
 # Fully pre-phonemized and mapped to your exact Audacity-calibrated timing envelopes.
@@ -111,27 +102,12 @@ class SuttaVoiceUatCallback(Callback):
     measures real-world acoustic properties and pause durations in milliseconds without any carrier signals,
     and forces a graceful exit only when global loss stabilizes AND all unit tests pass.
     """
-    def __init__(self, phoneme_map_path=None, target_global_loss=0.15, tolerance_pct=0.25):
+    def __init__(self):
         super().__init__()
-        self.target_global_loss = target_global_loss
-        self.tolerance_pct = tolerance_pct
+        self.target_global_loss = 0.15
+        self.tolerance_pct = 0.25
+        phoneme_map_path = "./phoneme_map.json"
         
-        # Check standard paths for phoneme_map.json robustly
-        if phoneme_map_path is None:
-            map_paths = [
-                "./phoneme_map.json",
-                "../phoneme_map.json",
-                "/content/drive/MyDrive/piper_training/phoneme_map.json",
-                "/content/drive/MyDrive/piper_training/en[gb]_pi[si]-suttaplayer-phoneme-map.json"
-            ]
-            for path in map_paths:
-                if os.path.exists(path):
-                    phoneme_map_path = path
-                    break
-        
-        if phoneme_map_path is None:
-            phoneme_map_path = "./phoneme_map.json"
-            
         # Load phoneme map to convert IPA string characters directly to token IDs
         with open(phoneme_map_path, "r", encoding="utf-8") as f:
             self.phoneme_to_id = json.load(f)
@@ -146,15 +122,13 @@ class SuttaVoiceUatCallback(Callback):
         return ids
 
     def synthesize_probe_audio(self, pl_module, text_ids):
-        # Generate raw audio natively using the current generator weights (model_g)
+        # Generate raw audio natively using the current generator weights
         pl_module.eval()
         with torch.no_grad():
             x = torch.LongTensor([text_ids]).to(pl_module.device)
             x_lengths = torch.LongTensor([len(text_ids)]).to(pl_module.device)
-            # Invoke the VITS generator's native inference graph (model_g)
-            generator_attr = "model_g" if hasattr(pl_module, "model_g") else "generator"
-            generator = getattr(pl_module, generator_attr)
-            audio = generator.infer(x, x_lengths, noise_scale=0.667, noise_scale_w=0.8, length_scale=1.1)[0]
+            # Invoke the VITS generator's native inference graph (Medium model)
+            audio = pl_module.model_g.infer(x, x_lengths, noise_scale=0.667, noise_scale_w=0.8, length_scale=1.1)[0]
             audio = audio.cpu().numpy().squeeze()
         return audio
 
@@ -162,18 +136,17 @@ class SuttaVoiceUatCallback(Callback):
         # Calculate Short-Time Energy
         hop_length = 128
         rms = librosa.feature.rms(y=y, hop_length=hop_length)
-        rms_db = librosa.amplitude_to_db(rms, ref=np.max)
+        rms_db = librosa.amplitude_to_db(rms, ref=np.max).flatten() # Prevent truth value ambiguity
         
-        # Determine silence frames relative to peak amplitude (1D array)
-        is_silent = (rms_db < -45.0).flatten()
+        # Determine silence frames relative to peak amplitude
+        is_silent = rms_db < -45.0
         
         longest_silence_len = 0
         current_silence_len = 0
         
-        # Scan entire waveform directly (since carrier padding is removed,
-        # we target the natural silent gap introduced between the anchor syllables 'stop' and 'listen')
-        for silent in is_silent:
-            if silent:
+        # Scan entire waveform directly
+        for frame in range(len(is_silent)):
+            if is_silent[frame]:
                 current_silence_len += 1
             else:
                 if current_silence_len > longest_silence_len:
@@ -187,32 +160,33 @@ class SuttaVoiceUatCallback(Callback):
         # Calculate Short-Time Energy
         hop_length = 128
         rms = librosa.feature.rms(y=y, hop_length=hop_length)
-        rms_db = librosa.amplitude_to_db(rms, ref=np.max)
+        rms_db = librosa.amplitude_to_db(rms, ref=np.max).flatten() # Prevent truth value ambiguity
         
-        # Determine silence frames relative to peak amplitude (1D array)
-        is_silent = (rms_db < -45.0).flatten()
+        # Determine silence frames relative to peak amplitude
+        is_silent = rms_db < -45.0
         
         gaps = []
-        current_gap_len = 0
+        current_gap = 0
         in_silence = False
         
-        for silent in is_silent:
+        for frame in range(len(is_silent)):
+            silent = is_silent[frame]
             if silent:
-                current_gap_len += 1
+                current_gap += 1
                 in_silence = True
             else:
                 if in_silence:
-                    gap_ms = (current_gap_len * hop_length / sr) * 1000
-                    gaps.append(gap_ms)
-                    current_gap_len = 0
+                    gap_ms = (current_gap * hop_length / sr) * 1000
+                    if gap_ms >= 50.0:  # Ignore micro-gaps shorter than 50ms
+                        gaps.append(gap_ms)
+                    current_gap = 0
                     in_silence = False
                     
-        if in_silence and current_gap_len > 0:
-            gap_ms = (current_gap_len * hop_length / sr) * 1000
-            gaps.append(gap_ms)
-            
-        # Filter out micro-silences under 50ms
-        gaps = [gap for gap in gaps if gap >= 50.0]
+        if in_silence:
+            gap_ms = (current_gap * hop_length / sr) * 1000
+            if gap_ms >= 50.0:
+                gaps.append(gap_ms)
+                
         return gaps
 
     def on_validation_end(self, trainer, pl_module):
@@ -261,32 +235,26 @@ class SuttaVoiceUatCallback(Callback):
                     uat_passed = False
 
             elif ptype == "pause_bracket":
-                # Measure bracket silence bounds around target
+                # Measure bracket silence bounds around target (leads and trails)
                 gaps = self.measure_silence_gaps(y)
                 target_lead = p["target_lead_ms"]
                 target_trail = p["target_trail_ms"]
                 
+                # We expect at least 2 distinct pause gaps for paired delimiters
                 if len(gaps) >= 2:
                     lead_ms = gaps[0]
-                    trail_ms = gaps[1]
-                elif len(gaps) == 1:
-                    lead_ms = gaps[0]
-                    trail_ms = 0.0
+                    trail_ms = gaps[-1]
+                    
+                    lead_passed = (target_lead * (1.0 - self.tolerance_pct)) <= lead_ms <= (target_lead * (1.0 + self.tolerance_pct))
+                    trail_passed = (target_trail * (1.0 - self.tolerance_pct)) <= trail_ms <= (target_trail * (1.0 + self.tolerance_pct))
+                    passed = lead_passed and trail_passed
+                    metric_str = f"L: {lead_ms:.1f} / T: {trail_ms:.1f} ms"
                 else:
-                    lead_ms = 0.0
-                    trail_ms = 0.0
-                
-                lead_low = target_lead * (1.0 - self.tolerance_pct)
-                lead_high = target_lead * (1.0 + self.tolerance_pct)
-                trail_low = target_trail * (1.0 - self.tolerance_pct)
-                trail_high = target_trail * (1.0 + self.tolerance_pct)
-                
-                lead_passed = lead_low <= lead_ms <= lead_high
-                trail_passed = trail_low <= trail_ms <= trail_high
-                passed = lead_passed and trail_passed
-                
+                    passed = False
+                    metric_str = f"Only found {len(gaps)} gap(s)"
+                    
                 status_str = "PASS" if passed else "FAIL"
-                print(f"  [{status_str}] {name:<25} | Lead Pause: {lead_ms:>5.1f} ms (Target: {target_lead} ms) | Trail Pause: {trail_ms:>5.1f} ms (Target: {target_trail} ms)")
+                print(f"  [{status_str}] {name:<25} | Spoken Pause: {metric_str} (Target Lead: {target_lead} / Trail: {target_trail} ms)")
                 checklist_status[name] = passed
                 if not passed:
                     uat_passed = False
@@ -312,19 +280,26 @@ class SuttaVoiceUatCallback(Callback):
                 if not passed:
                     uat_passed = False
 
-        print("-"*65)
+        print("-" * 65)
         # Final convergence checklist gate
         loss_ok = global_val_loss <= self.target_global_loss
         if loss_ok and uat_passed:
-            print("🎉 [CONVERGENCE] ALL ACCENT AND PUNCTUATION UNIT TESTS PASSED!")
-            print("Exiting trainer gracefully. Final ONNX export triggered.")
-            print("="*65 + "\n")
+            print("\n" + "*" * 65)
+            print("👑 UAT SIGN-OFF SUCCESSFUL: BOTH GLOBAL & UNIT TESTS PASSED!")
+            print(f" Finalizing Epoch {trainer.current_epoch} as SuttaPlayer's Gold Standard Checkpoint.")
+            print("*" * 65 + "\n")
             trainer.should_stop = True
+            
+            # Save the final consolidated UAT passing checkpoint file
+            pass_dir = os.path.dirname(trainer.checkpoint_callback.dirpath)
+            passed_ckpt = os.path.join(pass_dir, "G_suttaplayer_uat_passed.ckpt")
+            trainer.save_checkpoint(passed_ckpt)
+            print(f"Saved consolidated UAT-passed checkpoint to: {passed_ckpt}")
         else:
             reasons = []
             if not loss_ok:
                 reasons.append("Validation loss is still too high")
             if not uat_passed:
                 reasons.append("Punctuation pause or acoustic checks failed")
-            print(f"  ⚠️  [CONTINUE] Training will proceed. Reasons: {', '.join(reasons)}")
-            print("="*65 + "\n")
+            print(f" ⚠️  [CONTINUE] Training will proceed. Reasons: {', '.join(reasons)}")
+            print("=" * 65 + "\n")

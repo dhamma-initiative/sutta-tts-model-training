@@ -9,95 +9,78 @@ try:
     import lightning.pytorch as pl
     from lightning.pytorch.callbacks import Callback
 except ImportError:
-    try:
-        import pytorch_lightning as pl
-        from pytorch_lightning.callbacks import Callback
-    except ImportError:
-        # Final fallback for offline scripts
-        Callback = object
+    import pytorch_lightning as pl
+    from pytorch_lightning.callbacks import Callback
 
-# Define the 13 precise verification probes (4 acoustic + 9 punctuation)
-# Fully pre-phonemized and mapped to your exact Audacity-calibrated timing envelopes.
+# Pre-compiled, clean IPA phoneme probes (100% carrier signal removed!)
+# Maps directly to SuttaPlayer's custom Australian accent [en-gb, pi-si] IPA dictionaries.
 VERIFICATION_PROBES = {
     "probe_01_sibilance": {
-        "text": "sikhī, saṁyutta, and sāvatthī have sympathetically stilled suttas.",
-        "phonemes": "sˈikʰiː, sˈɐmjuttə, ˈand sˈaːwəttʰiː hˈav sˌɪmpəθˈɛtɪkli stˈɪld sˈuttəs.",
+        "phonemes": "s\u02c8ik\u02b0i\u02d0, s\u02c8\u0250mjutt\u0259, \u02c8and s\u02c8a\u02d0w\u0259tt\u02b0i\u02d0 h\u02c8av s\u02cc\u026amp\u0259\u03b8\u02c8\u025bt\u026akli st\u02c8\u026ald s\u02c8utt\u0259s.",
         "type": "acoustic_sibilance"
     },
     "probe_02_plosives": {
-        "text": "bhaddiya, bārāṇasī, baka brahmā, and bāhiya built big banyan.",
-        "phonemes": "bʰˈɐddijə, bˈaːɹaːɳˌəsiː, bˈɐkə b ɹˈɐhmaː, ˈand bˈaːhijə bˈɪlt bˈɪɡ bˈanjən.",
+        "phonemes": "b\u02b0\u02c8\u0250ddij\u0259, b\u02c8a\u02d0\u0279a\u02d0\u0273\u02cc\u0259si\u02d0, b\u02c8\u0250k\u0259 b \u0279\u02c8\u0250hma\u02d0, \u02c8and b\u02c8a\u02d0hij\u0259 b\u02c8\u026alt b\u02c8\u026a\u0261 b\u02c8anj\u0259n.",
         "type": "acoustic_plosives"
     },
     "probe_03_formants": {
-        "text": "acchariy'abbhūtadhamma piṇḍapātapārisuddhi sutta majjhima nikāya.",
-        "phonemes": "ˈɐtʃtʃhəɹij ˈɐbbʰuːtˌədʰəmmə pˈiɳɖəpˌaːtəpˌaːɹisˌuddʰi sˈuttə mˈɐdʒdʒhimə nˈikaːjə.",
+        "phonemes": "\u02c8\u0250t\u0283t\u0283h\u0259\u0279ij \u02c8\u0250bb\u02b0u\u02d0t\u02cc\u0259d\u02b0\u0259mm\u0259 p\u02c8i\u0273\u0256\u0259p\u02cca\u02d0t\u0259p\u02cca\u02d0\u0279is\u02ccudd\u02b0i s\u02c8utt\u0259 m\u02c8\u0250d\u0292d\u0292him\u0259 n\u02c8ika\u02d0j\u0259.",
         "type": "acoustic_formants"
     },
     "probe_04_loudness": {
-        "text": "What bliss! What bliss! Truly, the Buddha's bidding is done.",
-        "phonemes": "wˈɒt blˈɪs! wˈɒt blˈɪs! tɹˈuːli, ðˈə bˈuddʰəs bˈɪdɪŋ ˈɪz dˈʌn.",
+        "phonemes": "w\u02c8\u0252t bl\u02c8\u026as! w\u02c8\u0252t bl\u02c8\u026as! t\u0279\u02c8u\u02d0li, \u00f0\u02c8\u0259 b\u02c8udd\u02b0\u0259s b\u02c8\u026ad\u026a\u014b \u02c8\u026az d\u02c8\u028cn.",
         "type": "acoustic_dynamics"
     },
     "probe_punct_01_comma": {
-        "text": "stop, listen.",
-        "phonemes": "stˈɒp, lˈɪsən.",
+        "phonemes": "st\u02c8\u0252p, l\u02c8\u026as\u0259n.",
         "type": "pause",
         "symbol": ",",
         "target_ms": 295.0
     },
     "probe_punct_02_semicolon": {
-        "text": "stop; listen.",
-        "phonemes": "stˈɒp; lˈɪsən.",
+        "phonemes": "st\u02c8\u0252p; l\u02c8\u026as\u0259n.",
         "type": "pause",
         "symbol": ";",
         "target_ms": 260.0
     },
     "probe_punct_03_colon": {
-        "text": "stop: listen.",
-        "phonemes": "stˈɒp: lˈɪsən.",
+        "phonemes": "st\u02c8\u0252p: l\u02c8\u026as\u0259n.",
         "type": "pause",
         "symbol": ":",
         "target_ms": 340.0
     },
     "probe_punct_04_em_dash": {
-        "text": "stop—listen.",
-        "phonemes": "stˈɒp—lˈɪsən.",
+        "phonemes": "st\u02c8\u0252p\u2014l\u02c8\u026as\u0259n.",
         "type": "pause",
-        "symbol": "—",
+        "symbol": "\u2014",
         "target_ms": 255.0
     },
     "probe_punct_05_ellipsis": {
-        "text": "stop… listen.",
-        "phonemes": "stˈɒp… lˈɪsən.",
+        "phonemes": "st\u02c8\u0252p\u2026 l\u02c8\u026as\u0259n.",
         "type": "pause",
-        "symbol": "…",
+        "symbol": "\u2026",
         "target_ms": 530.0
     },
     "probe_punct_06_brackets": {
-        "text": "stop [listen] now.",
-        "phonemes": "stˈɒp [lˈɪsən] nˈaʊ.",
+        "phonemes": "st\u02c8\u0252p [l\u02c8\u026as\u0259n] n\u02c8a\u028a.",
         "type": "pause_bracket",
         "target_lead_ms": 420.0,
         "target_trail_ms": 280.0
     },
     "probe_punct_07_bullet": {
-        "text": "stop • listen.",
-        "phonemes": "stˈɒp • lˈɪsən.",
+        "phonemes": "st\u02c8\u0252p \u2022 l\u02c8\u026as\u0259n.",
         "type": "pause",
-        "symbol": "•",
+        "symbol": "\u2022",
         "target_ms": 420.0
     },
     "probe_punct_08_parentheses": {
-        "text": "stop (listen) now.",
-        "phonemes": "stˈɒp (lˈɪsən) nˈaʊ.",
+        "phonemes": "st\u02c8\u0252p (l\u02c8\u026as\u0259n) n\u02c8a\u028a.",
         "type": "pause_bracket",
         "target_lead_ms": 420.0,
         "target_trail_ms": 280.0
     },
     "probe_punct_09_braces": {
-        "text": "stop {listen} now.",
-        "phonemes": "stˈɒp {lˈɪsən} nˈaʊ.",
+        "phonemes": "st\u02c8\u0252p {l\u02c8\u026as\u0259n} n\u02c8a\u028a.",
         "type": "pause_bracket",
         "target_lead_ms": 420.0,
         "target_trail_ms": 280.0
@@ -111,29 +94,14 @@ class SuttaVoiceUatCallback(Callback):
     measures real-world acoustic properties and pause durations in milliseconds without any carrier signals,
     and forces a graceful exit only when global loss stabilizes AND all unit tests pass.
     """
-    def __init__(self, phoneme_map_path=None, target_global_loss=0.15, tolerance_pct=0.25):
+    def __init__(self):
         super().__init__()
-        self.target_global_loss = target_global_loss
-        self.tolerance_pct = tolerance_pct
+        self.target_global_loss = 0.15
+        self.tolerance_pct = 0.25
+        phoneme_map_path = "./phoneme_map.json"
         
-        # Check standard paths for phoneme_map.json robustly
-        if phoneme_map_path is None:
-            map_paths = [
-                "./phoneme_map.json",
-                "../phoneme_map.json",
-                "/content/drive/MyDrive/piper_training/phoneme_map.json",
-                "/content/drive/MyDrive/piper_training/en[gb]_pi[si]-suttaplayer-phoneme-map.json"
-            ]
-            for path in map_paths:
-                if os.path.exists(path):
-                    phoneme_map_path = path
-                    break
-        
-        if phoneme_map_path is None:
-            phoneme_map_path = "./phoneme_map.json"
-            
         # Load phoneme map to convert IPA string characters directly to token IDs
-        with open(phoneme_map_path, "r", encoding="utf-8") as f:
+        with open(phoneme_map_path, "r") as f:
             self.phoneme_to_id = json.load(f)
 
     def phonemes_to_ids(self, phoneme_str):
@@ -146,15 +114,13 @@ class SuttaVoiceUatCallback(Callback):
         return ids
 
     def synthesize_probe_audio(self, pl_module, text_ids):
-        # Generate raw audio natively using the current generator weights (model_g)
+        # Generate raw audio natively using the current generator weights
         pl_module.eval()
         with torch.no_grad():
             x = torch.LongTensor([text_ids]).to(pl_module.device)
             x_lengths = torch.LongTensor([len(text_ids)]).to(pl_module.device)
-            # Invoke the VITS generator's native inference graph (model_g)
-            generator_attr = "model_g" if hasattr(pl_module, "model_g") else "generator"
-            generator = getattr(pl_module, generator_attr)
-            audio = generator.infer(x, x_lengths, noise_scale=0.667, noise_scale_w=0.8, length_scale=1.1)[0]
+            # Invoke the VITS generator's native inference graph (Medium model)
+            audio = pl_module.model_g.infer(x, x_lengths, noise_scale=0.667, noise_scale_w=0.8, length_scale=1.1)[0]
             audio = audio.cpu().numpy().squeeze()
         return audio
 
@@ -164,7 +130,7 @@ class SuttaVoiceUatCallback(Callback):
         rms = librosa.feature.rms(y=y, hop_length=hop_length)
         rms_db = librosa.amplitude_to_db(rms, ref=np.max)
         
-        # Determine silence frames relative to peak amplitude (1D array)
+        # Determine silence frames relative to peak amplitude (flattened to 1D to prevent truth-value errors)
         is_silent = (rms_db < -45.0).flatten()
         
         longest_silence_len = 0
@@ -172,8 +138,8 @@ class SuttaVoiceUatCallback(Callback):
         
         # Scan entire waveform directly (since carrier padding is removed,
         # we target the natural silent gap introduced between the anchor syllables 'stop' and 'listen')
-        for silent in is_silent:
-            if silent:
+        for frame in range(len(is_silent)):
+            if is_silent[frame]:
                 current_silence_len += 1
             else:
                 if current_silence_len > longest_silence_len:
@@ -189,30 +155,37 @@ class SuttaVoiceUatCallback(Callback):
         rms = librosa.feature.rms(y=y, hop_length=hop_length)
         rms_db = librosa.amplitude_to_db(rms, ref=np.max)
         
-        # Determine silence frames relative to peak amplitude (1D array)
+        # Determine silence frames relative to peak amplitude (flattened to 1D to prevent truth-value errors)
         is_silent = (rms_db < -45.0).flatten()
         
         gaps = []
-        current_gap_len = 0
+        current_silence_len = 0
         in_silence = False
         
-        for silent in is_silent:
+        # Ignore leading/trailing padding
+        start_frame = int(len(is_silent) * 0.15)
+        end_frame = int(len(is_silent) * 0.85)
+        
+        for frame in range(start_frame, end_frame):
+            silent = is_silent[frame]
             if silent:
-                current_gap_len += 1
+                current_silence_len += 1
                 in_silence = True
             else:
                 if in_silence:
-                    gap_ms = (current_gap_len * hop_length / sr) * 1000
-                    gaps.append(gap_ms)
-                    current_gap_len = 0
+                    duration_ms = (current_silence_len * hop_length / sr) * 1000
+                    # Filter out tiny micro-silences below 30ms (e.g. stop consonant closures)
+                    if duration_ms > 30.0:
+                        gaps.append(duration_ms)
+                    current_silence_len = 0
                     in_silence = False
                     
-        if in_silence and current_gap_len > 0:
-            gap_ms = (current_gap_len * hop_length / sr) * 1000
-            gaps.append(gap_ms)
-            
-        # Filter out micro-silences under 50ms
-        gaps = [gap for gap in gaps if gap >= 50.0]
+        # Catch any trailing gap
+        if in_silence and current_silence_len > 0:
+            duration_ms = (current_silence_len * hop_length / sr) * 1000
+            if duration_ms > 30.0:
+                gaps.append(duration_ms)
+                
         return gaps
 
     def on_validation_end(self, trainer, pl_module):
@@ -263,31 +236,32 @@ class SuttaVoiceUatCallback(Callback):
             elif ptype == "pause_bracket":
                 # Measure bracket silence bounds around target
                 gaps = self.measure_silence_gaps(y)
-                target_lead = p["target_lead_ms"]
-                target_trail = p["target_trail_ms"]
                 
+                # We expect at least two distinct gaps representing the opening and closing brackets
                 if len(gaps) >= 2:
                     lead_ms = gaps[0]
                     trail_ms = gaps[1]
-                elif len(gaps) == 1:
-                    lead_ms = gaps[0]
-                    trail_ms = 0.0
+                    
+                    target_lead = p["target_lead_ms"]
+                    target_trail = p["target_trail_ms"]
+                    
+                    lead_min = target_lead * (1.0 - self.tolerance_pct)
+                    lead_max = target_lead * (1.0 + self.tolerance_pct)
+                    trail_min = target_trail * (1.0 - self.tolerance_pct)
+                    trail_max = target_trail * (1.0 + self.tolerance_pct)
+                    
+                    lead_passed = lead_min <= lead_ms <= lead_max
+                    trail_passed = trail_min <= trail_ms <= trail_max
+                    passed = lead_passed and trail_passed
+                    
+                    status_str = "PASS" if passed else "FAIL"
+                    print(f"  [{status_str}] {name:<25} | Lead Pause: {lead_ms:.1f}ms, Trail Pause: {trail_ms:.1f}ms (Targets: L:{target_lead:.1f}ms, T:{target_trail:.1f}ms)")
+                    checklist_status[name] = passed
                 else:
-                    lead_ms = 0.0
-                    trail_ms = 0.0
-                
-                lead_low = target_lead * (1.0 - self.tolerance_pct)
-                lead_high = target_lead * (1.0 + self.tolerance_pct)
-                trail_low = target_trail * (1.0 - self.tolerance_pct)
-                trail_high = target_trail * (1.0 + self.tolerance_pct)
-                
-                lead_passed = lead_low <= lead_ms <= lead_high
-                trail_passed = trail_low <= trail_ms <= trail_high
-                passed = lead_passed and trail_passed
-                
-                status_str = "PASS" if passed else "FAIL"
-                print(f"  [{status_str}] {name:<25} | Lead Pause: {lead_ms:>5.1f} ms (Target: {target_lead} ms) | Trail Pause: {trail_ms:>5.1f} ms (Target: {target_trail} ms)")
-                checklist_status[name] = passed
+                    passed = False
+                    status_str = "FAIL"
+                    print(f"  [{status_str}] {name:<25} | Gaps found: {len(gaps)} (Target: >= 2 Gaps)")
+                    checklist_status[name] = passed
                 if not passed:
                     uat_passed = False
 
@@ -326,5 +300,5 @@ class SuttaVoiceUatCallback(Callback):
                 reasons.append("Validation loss is still too high")
             if not uat_passed:
                 reasons.append("Punctuation pause or acoustic checks failed")
-            print(f"  ⚠️  [CONTINUE] Training will proceed. Reasons: {', '.join(reasons)}")
+            print(f" ⚠️  [CONTINUE] Training will proceed. Reasons: {', '.join(reasons)}")
             print("="*65 + "\n")

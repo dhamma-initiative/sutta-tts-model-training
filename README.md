@@ -88,7 +88,7 @@ From your sandbox root directory, execute the Python training command pointing t
 ```bash
 python3 -m piper.train fit \
   --config sutta-tts-model-training/config/rtx3050-train-config.yaml \
-  --data.voice_name=au_male_57 \
+  --data.voice_name=en_gb-suttaplayer-medium \
   --data.csv_path=metadata.csv \
   --data.audio_dir=wavs/ \
   --data.phoneme_type=text \
