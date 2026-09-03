@@ -50,7 +50,7 @@ def num_to_words(n):
                 t = rem // 10
                 u = rem % 10
                 if u > 0:
-                    parts.append(f"{tens[t]}-{units[u]}")
+                    parts.append(f"{tens[t]} {units[u]}")
                 else:
                     parts.append(tens[t])
         return " ".join(parts)
@@ -69,19 +69,23 @@ def expand_numbers_in_text(text):
     # Step 1: Strip commas from numbers (e.g., 1,250 -> 1250)
     text = re.sub(r'(\d),(\d)', r'\1\2', text)
     
-    # Step 2: Convert bracketed numbers [4] -> four. (note the trailing dot)
-    text = re.sub(r'\[(\d+)\]', lambda m: num_to_words(int(m.group(1))) + '.', text)
-    
-    # Step 3: Convert parenthesized letters (a) -> a. (note the trailing dot)
-    text = re.sub(r'\(([a-zA-Z])\)', r'\1.', text)
-    
-    # Step 4: Convert remaining numbers like 35 -> thirty-five, 16 -> sixteen
+    # Step 2: Convert remaining numbers like 35 -> thirty five, 16 -> sixteen
     text = re.sub(r'\b\d+\b', lambda m: num_to_words(int(m.group(0))), text)
     
     return text
 
+def clean_up_redundant_punctuation(result):
+    result = re.sub(r'([.,;:!?])[^\S\r\n]+(?=[.,;:!?])', r'\1', result)
+    result = re.sub(r'([.,;:!?])[.,;:!?]+', r'\1', result)
+    result = re.sub(r'[^\S\r\n]+([.,;:!?])', r'\1', result)
+    result = re.sub(r'([.,;:!?])(?=\w)', r'\1 ', result)
+    result = re.sub(r'[^\S\r\n]{2,}', ' ', result)
+    result = re.sub(r'^[.,;:!?\t ]+', '', result, flags=re.M)
+    lines = [line.strip() for line in result.split('\n')]
+    return '\n'.join(lines)
+
 def main():
-    parser = argparse.ArgumentParser(description="SuttaPlayer Python Phonemizer Parity Verifier v2")
+    parser = argparse.ArgumentParser(description="SuttaPlayer Python Phonemizer Parity Verifier v3")
     parser.add_argument("-p", "--phoneme_map", default="./config/en[gb]_pi[si]-suttaplayer-phoneme-map.json", help="Path to phoneme map")
     parser.add_argument("-e", "--english_dict", default="./config/pho_en[gb]-to-espeak-v1.51-ipa.json", help="Path to English dictionary")
     parser.add_argument("-pi", "--pali_dict", default="./config/pho_pi[si]-to-espeak-v1.51-ipa.json", help="Path to Pali dictionary")
@@ -90,7 +94,7 @@ def main():
     
     args = parser.parse_args()
 
-    print_header("SuttaPlayer Python Phonemizer Parity Verifier v2")
+    print_header("SuttaPlayer Python Phonemizer Parity Verifier v3")
 
     print("📂 Ingesting local validation resources...")
     english_dict_raw = load_json(args.english_dict)
@@ -104,8 +108,8 @@ def main():
     print(f"  ✅ Cleaned Reference Corpus Loaded: {len(expected_lines)} sentences.\n")
 
     # 1. Normalize dictionaries to NFC and Lowercase, stripping ZWJ
-    english_dict = {unicodedata.normalize("NFC", k.lower()): v.replace("\u200D", "") for k, v in english_dict_raw.items()}
-    pali_dict = {unicodedata.normalize("NFC", k.lower()): v.replace("\u200D", "") for k, v in pali_dict_raw.items()}
+    english_dict = {unicodedata.normalize("NFC", k.lower()): v.replace("\u200D", "").replace("\u200d", "") for k, v in english_dict_raw.items()}
+    pali_dict = {unicodedata.normalize("NFC", k.lower()): v.replace("\u200D", "").replace("\u200d", "") for k, v in pali_dict_raw.items()}
 
     # 2. Compile preprocessing rules
     # Case sensitive (JSON array of length 2)
@@ -165,10 +169,11 @@ def main():
             
             # Step F: Final cleanup of carriage returns and whitespaces
             generated = generated.strip()
+            generated = clean_up_redundant_punctuation(generated)
             
             # Verify exact NFC matches
-            expected_nfc = unicodedata.normalize("NFC", expected).strip().replace("\u200D", "")
-            generated_nfc = unicodedata.normalize("NFC", generated).replace("\u200D", "")
+            expected_nfc = unicodedata.normalize("NFC", expected).strip().replace("\u200D", "").replace("\u200d", "")
+            generated_nfc = unicodedata.normalize("NFC", generated).replace("\u200D", "").replace("\u200d", "")
             
             if generated_nfc != expected_nfc:
                 mismatches.append({
