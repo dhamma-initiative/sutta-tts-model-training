@@ -8,62 +8,73 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import Callback
 
 # Pre-compiled, clean IPA phoneme probes (100% carrier signal removed!)
-# Maps directly to SuttaPlayer's custom Australian accent IPA dictionaries.
+# Maps directly to SuttaPlayer's custom Australian accent [en-gb, pi-si] IPA dictionaries.
 VERIFICATION_PROBES = {
     "probe_01_sibilance": {
-        "phonemes": "sɪkhɪɪ, sãmˈjuːθθʌ, ˈænd sɑːɑːvʌθθhɪɪ hæv sˌɪstəmˈæɾɪkli stˈɪld suːθθʌs.",
+        "text": "sikhī, saṁyutta, and sāvatthī have sympathetically stilled suttas.",
+        "phonemes": "sˈikʰiː, sˈɐmjuttə, ˈand sˈaːwəttʰiː hˈav sˌɪmpəθˈɛtɪkli stˈɪld sˈuttəs.",
         "type": "acoustic_sibilance"
     },
     "probe_02_plosives": {
-        "phonemes": "bhʌððɪjˈʌ, bɑːɑːɹɑːɑːnˌʌsɪɪ, bʌkʌ bɹʌhmɑːˈʌ, ˈænd bɑːɑːhɪjˈʌ bˈɪlt bˈɪɡ bˈænjənz.",
+        "text": "bhaddiya, bārāṇasī, baka brahmā, and bāhiya built big banyan.",
+        "phonemes": "bʰˈɐddijə, bˈaːɹaːɳˌəsiː, bˈɐkə b ɹˈɐhmaː, ˈand bˈaːhijə bˈɪlt bˈɪɡ bˈanjən.",
         "type": "acoustic_plosives"
     },
     "probe_03_formants": {
-        "phonemes": "ʌʧʧhʌɹɪj'ʌbbhuːuːθʌðhʌmmʌ pɪnˌdˌʌpɑːɑːθʌpɑːɑːɹɪsuːððɪ suːθθʌ mʌʤʤhɪmʌ nɪkɑːɑːjˈʌ.",
+        "text": "acchariy'abbhūtadhamma piṇḍapātapārisuddhi sutta majjhima nikāya.",
+        "phonemes": "ˈɐtʃtʃhəɹij ˈɐbbʰuːtˌədʰəmmə pˈiɳɖəpˌaːtəpˌaːɹisˌuddʰi sˈuttə mˈɐdʒdʒhimə nˈikaːjə.",
         "type": "acoustic_formants"
     },
     "probe_04_loudness": {
-        "phonemes": "wˌʌt blˈɪs! wˌʌt blˈɪs! tɹˈuːli, ðˈə buːððhʌz bˈɪdɪŋ ɪz dˈʌn.",
+        "text": "What bliss! What bliss! Truly, the Buddha's bidding is done.",
+        "phonemes": "wˈɒt blˈɪs! wˈɒt blˈɪs! tɹˈuːli, ðˈə bˈuddʰəs bˈɪdɪŋ ˈɪz dˈʌn.",
         "type": "acoustic_dynamics"
     },
     "probe_punct_01_comma": {
-        "phonemes": "stˈɑːp, lˈɪsən.",
+        "text": "stop, listen.",
+        "phonemes": "stˈɒp, lˈɪsən.",
         "type": "pause",
         "symbol": ",",
         "target_ms": 150.0
     },
     "probe_punct_02_semicolon": {
-        "phonemes": "stˈɑːp; lˈɪsən.",
+        "text": "stop; listen.",
+        "phonemes": "stˈɒp; lˈɪsən.",
         "type": "pause",
         "symbol": ";",
         "target_ms": 250.0
     },
     "probe_punct_03_colon": {
-        "phonemes": "stˈɑːp: lˈɪsən.",
+        "text": "stop: listen.",
+        "phonemes": "stˈɒp: lˈɪsən.",
         "type": "pause",
         "symbol": ":",
         "target_ms": 250.0
     },
     "probe_punct_04_em_dash": {
-        "phonemes": "stˈɑːp—lˈɪsən.",
+        "text": "stop—listen.",
+        "phonemes": "stˈɒp—lˈɪsən.",
         "type": "pause",
         "symbol": "—",
         "target_ms": 350.0
     },
     "probe_punct_05_ellipsis": {
-        "phonemes": "stˈɑːp… lˈɪsən.",
+        "text": "stop… listen.",
+        "phonemes": "stˈɒp… lˈɪsən.",
         "type": "pause",
         "symbol": "…",
         "target_ms": 600.0
     },
     "probe_punct_06_brackets": {
-        "phonemes": "stˈɑːp [lˈɪsən] nˈaʊ.",
+        "text": "stop [listen] now.",
+        "phonemes": "stˈɒp [lˈɪsən] nˈaʊ.",
         "type": "pause_bracket",
         "target_lead_ms": 120.0,
         "target_trail_ms": 180.0
     },
     "probe_punct_07_bullet": {
-        "phonemes": "stˈɑːp • lˈɪsən.",
+        "text": "stop • listen.",
+        "phonemes": "stˈɒp • lˈɪsən.",
         "type": "pause",
         "symbol": "•",
         "target_ms": 400.0
