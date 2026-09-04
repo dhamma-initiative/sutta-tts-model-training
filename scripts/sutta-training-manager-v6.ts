@@ -46,7 +46,7 @@ async function statPath(path: string) {
 }
 
 async function downloadBaseCheckpoint() {
-  const url = "https://huggingface.co/datasets/rhasspy/piper-checkpoints/resolve/main/en/en_GB/northern_english_male/medium/epoch%3D9029-step%3D2261720.ckpt?download=true";
+  const url = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.ckpt";
   if (isDryRun) {
     console.log("[DRY-RUN] Would download: " + url + " directly to " + BASE_CKPT);
     return;
@@ -279,9 +279,6 @@ cd /content/piper1-gpl
   --data.batch_size 32 \
   --data.espeak_voice "en-gb" \
   --model.sample_rate 22050 \
-  --model.mel_channels 80 \
-  --model.mel_fmin 0 \
-  --model.mel_fmax 8000 \
   --trainer.accelerator gpu \
   --trainer.devices 1 \
   --trainer.precision 16-mixed \
