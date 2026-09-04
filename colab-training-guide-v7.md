@@ -1,12 +1,12 @@
 # Google Colab Training Guide & Google Sheets Integration (v6)
 
-This guide outlines the execution strategy for fine-tuning your VITS `au_male_57` model [vits-colab-guidelines.md], setting up your Google Sheets real-time convergence dashboard, and configuring your local machine for seamless cloud sync [sutta-training-manager-v4.ts].
+This guide outlines the execution strategy for fine-tuning your VITS `au_male_57` model [vits-colab-guidelines.md], setting up your Google Sheets real-time convergence dashboard, and configuring your local machine for seamless cloud sync [sutta-training-manager-v5.ts].
 
 ---
 
 ## 1. Directory Structure on Google Drive
 
-Ensure your base Google Drive folder `/MyDrive/piper_training/` contains the following structured files [sutta-training-manager-v4.ts]:
+Ensure your base Google Drive folder `/MyDrive/piper_training/` contains the following structured files [sutta-training-manager-v5.ts]:
 
 ```text
 /My Drive (Google Drive Root)
@@ -14,7 +14,7 @@ Ensure your base Google Drive folder `/MyDrive/piper_training/` contains the fol
     ├── metadata.csv                              ← Your clean, verified 1,000-line corpus
     ├── phoneme_map.json                          ← Custom 162-symbol token-to-ID table
     ├── train_sutta_voice.py                      ← train_sutta_voice-v5.py callback
-    ├── sutta-training-manager-v4.ts              ← Deno orchestrator script
+    ├── sutta-training-manager-v5.ts              ← Deno orchestrator script
     ├── en_GB-northern_english_male-medium.ckpt   ← Pre-trained non-rhotic baseline model
     └── wavs/                                     ← Raw 22.05 kHz wav files directory
 ```
