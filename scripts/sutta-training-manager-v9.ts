@@ -69,7 +69,7 @@ async function downloadBaseCheckpoint() {
 
 async function verifyDependencies() {
   console.log("🔍 Auditing Google Drive dependencies...");
-  const paths = [\n    { label: "Metadata CSV", path: METADATA_CSV, required: true },
+  const paths = [{ label: "Metadata CSV", path: METADATA_CSV, required: true },
     { label: "WAVs Directory", path: AUDIO_DIR, required: true },
     { label: "Phoneme Map JSON", path: PHONEME_MAP, required: true },
     { label: "Base Checkpoint", path: BASE_CKPT, required: true }
