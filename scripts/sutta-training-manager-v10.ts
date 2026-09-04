@@ -1,4 +1,4 @@
-// sutta-training-manager-v9.ts
+// sutta-training-manager-v10.ts
 import { ensureDir } from "jsr:@std/fs/ensure-dir";
 import { join, basename } from "jsr:@std/path";
 
@@ -14,12 +14,11 @@ const BASE_CKPT = join(DRIVE_BASE, "en_GB-northern_english_male-medium.ckpt");
 
 const LOCAL_LOGS = join(LOCAL_CACHE, "lightning_logs");
 const DRIVE_CKPTS = join(DRIVE_BASE, "checkpoints");
+const MAMBA_BIN = join(Deno.cwd(), "bin", "micromamba");
 
 const args = Deno.args;
 const isDryRun = args.includes("--dry-run");
 const isDiagSetup = args.includes("--diag-setup");
-
-const MAMBA_BIN = join(Deno.cwd(), "bin", "micromamba");
 
 async function runCmd(cmd: string, argsList: string[], options: Deno.CommandOptions = {}) {
   const cmdStr = cmd + " " + argsList.join(" ");
@@ -48,7 +47,7 @@ async function statPath(path: string) {
 }
 
 async function downloadBaseCheckpoint() {
-  const url = "https://huggingface.co/datasets/rhasspy/piper-checkpoints/resolve/main/en/en_GB/northern_english_male/medium/epoch%3D9029-step%3D2261720.ckpt?download=true";
+  const url = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.ckpt";
   if (isDryRun) {
     console.log("[DRY-RUN] Would download: " + url + " directly to " + BASE_CKPT);
     return;
@@ -69,7 +68,8 @@ async function downloadBaseCheckpoint() {
 
 async function verifyDependencies() {
   console.log("🔍 Auditing Google Drive dependencies...");
-  const paths = [{ label: "Metadata CSV", path: METADATA_CSV, required: true },
+  const paths = [
+    { label: "Metadata CSV", path: METADATA_CSV, required: true },
     { label: "WAVs Directory", path: AUDIO_DIR, required: true },
     { label: "Phoneme Map JSON", path: PHONEME_MAP, required: true },
     { label: "Base Checkpoint", path: BASE_CKPT, required: true }
@@ -93,10 +93,12 @@ async function verifyDependencies() {
     }
   }
 
+  // Hugging Face baseline checkpoint auto-recovery check
   const ckptInfo = await statPath(BASE_CKPT);
   if (!ckptInfo && !isDryRun) {
-    console.log("\nℹ️ Base checkpoint is missing from Google Drive.");
-    console.log("📥 Automatically downloading the pre-trained baseline model from Hugging Face directly to your Drive...");
+    console.log("\nℹ️ Base checkpoint 'en_GB-northern_english_male-medium.ckpt' is missing from Google Drive.");
+    console.log("📥 Automatically downloading the pre-trained non-rhotic baseline model from Hugging Face directly to your Drive...");
+    console.log("   (This is a 114MB file and may take 30-60 seconds depending on Colab's connection. Please wait...)");
     try {
       await downloadBaseCheckpoint();
     } catch {
@@ -140,7 +142,7 @@ async function installPythonEnv() {
 
   const envExist = await Deno.stat("/root/micromamba/envs/py311").then(() => true).catch(() => false);
   if (!envExist) {
-    console.log("Creating virtual Python environment 'py311' with native setuptools package...");
+    console.log("Creating virtual Python environment 'py311'...");
     if (isDryRun) {
       console.log("[DRY-RUN] Would run: " + MAMBA_BIN + " create -y -r /root/micromamba -n py311 python=3.11.9 pip setuptools -c conda-forge");
     } else {
@@ -177,7 +179,7 @@ async function cloneRepo() {
     "run",
     "-r", "/root/micromamba",
     "-n", "py311",
-    "pip", "install",
+    "python3", "-m", "pip", "install",
     "setuptools",
     "torch==2.3.1",
     "onnx==1.15.0",
@@ -268,22 +270,22 @@ async function startTrainingSession() {
   const trainingCmdScript = `#!/bin/bash
 cd /content/piper1-gpl
 # Launch training using direct command-line arguments to completely avoid YAML parsing failure modes
-/content/bin/micromamba run -r /root/micromamba -n py311 python3 -m piper.train fit \\
-  --data.voice_name "en_gb-suttaplayer-medium" \\
-  --data.csv_path "${METADATA_CSV}" \\
-  --data.audio_dir "${AUDIO_DIR}" \\
-  --data.cache_dir "${LOCAL_CACHE}/cache" \\
-  --data.config_path "${LOCAL_CACHE}/config.json" \\
-  --data.phoneme_type text \\
-  --data.phonemes_path "${PHONEME_MAP}" \\
-  --data.num_symbols 256 \\
-  --data.batch_size 32 \\
-  --data.espeak_voice "en-gb" \\
-  --model.sample_rate 22050 \\
-  --trainer.accelerator gpu \\
-  --trainer.devices 1 \\
-  --trainer.precision 16-mixed \\
-  --trainer.callbacks.class_path "train_sutta_voice.SuttaVoiceUatCallback" \\
+/content/bin/micromamba run -r /root/micromamba -n py311 python3 -m piper.train fit \
+  --data.voice_name "en_gb-suttaplayer-medium" \
+  --data.csv_path "${METADATA_CSV}" \
+  --data.audio_dir "${AUDIO_DIR}" \
+  --data.cache_dir "${LOCAL_CACHE}/cache" \
+  --data.config_path "${LOCAL_CACHE}/config.json" \
+  --data.phoneme_type text \
+  --data.phonemes_path "${PHONEME_MAP}" \
+  --data.num_symbols 256 \
+  --data.batch_size 32 \
+  --data.espeak_voice "en-gb" \
+  --model.sample_rate 22050 \
+  --trainer.accelerator gpu \
+  --trainer.devices 1 \
+  --trainer.precision 16-mixed \
+  --trainer.callbacks.class_path "train_sutta_voice.SuttaVoiceUatCallback" \
   --ckpt_path "${BASE_CKPT}"
 `;
 
@@ -301,7 +303,168 @@ cd /content/piper1-gpl
     await cmd.output();
 
     const tmuxListCmd = new Deno.Command("tmux", { args: ["ls"] });
-    const out = await tmuxListCmd.output();    const tmuxList = new TextDecoder().decode(out.stdout);
+    const out = await tmuxListCmd.output();
+    const tmuxList = new TextDecoder().decode(out.stdout);
+
     if (!tmuxList.includes("piper_train")) {
       console.log("Creating new tmux session 'piper_train'...");
-      const startTmux = new Deno.Command(\"tmux\", {\n        args: [\"new-session\", \"-d\", \"-s\", \"piper_train\", \"bash\", scriptPath]\n      });\n      await startTmux.output();\n      console.log(\"🎉 Training successfully launched in tmux session 'piper_train'!\");\n    } else {\n      console.log(\"⚠️ A tmux session named 'piper_train' is already running. Monitoring active training.\");\n    }\n  }\n}\n\nasync function monitorCheckpoints() {\n  console.log(\"🔄 Checkpoint Sync daemon active. Scanning for new checkpoint iterations...\");\n  if (isDryRun) {\n    console.log(\"[DRY-RUN] Would initiate checkpoint polling interval (rsync \" + LOCAL_LOGS + \"/ -> \" + DRIVE_CKPTS + \"/)\");\n    return;\n  }\n  \n  setInterval(async () => {\n    try {\n      const logsExist = await Deno.stat(LOCAL_LOGS).then(() => true).catch(() => false);\n      if (!logsExist) return;\n\n      const cmd = new Deno.Command(\"rsync\", {\n        args: [\n          \"-av\",\n          \"--include=*/\",\n          \"--include=*.ckpt\",\n          \"--exclude=*\",\n          LOCAL_LOGS + \"/\",\n          DRIVE_CKPTS + \"/\"\n        ]\n      });\n      const { code } = await cmd.output();\n      if (code === 0) {\n        const findCmd = new Deno.Command(\"find\", {\n          args: [LOCAL_LOGS, \"-name\", \"*.ckpt\", \"-mmin\", \"-2\"]\n        });\n        const out = await findCmd.output();\n        const latest = new TextDecoder().decode(out.stdout).trim();\n        if (latest) {\n          console.log(\"✨ [Drive Sync] Newly calculated checkpoints synchronized to Drive:\\n  \" + latest);\n        }\n      }\n    } catch (err) {\n      console.error(\"Error running checkpoint rsync loop:\", err);\n    }\n  }, CHECKPOINT_MONITOR_INTERVAL_MS);\n}\n\nfunction startKeepAliveLoop() {\n  console.log(\"💓 Keep-alive loop activated. Suppressing socket timeouts...\");\n  if (isDryRun) {\n    console.log(\"[DRY-RUN] Would initiate keep-alive polling interval.\");\n    return;\n  }\n  let ticks = 0;\n  setInterval(async () => {\n    ticks++;\n    const minutes = (ticks * KEEP_ALIVE_INTERVAL_MS) / 60000;\n    \n    let metricsLog = \"\";\n    try {\n      const latestMetricFile = \"/content/piper_cache/lightning_logs/version_0/metrics.csv\";\n      const fileInfo = await Deno.stat(latestMetricFile);\n      if (fileInfo.isFile) {\n        const text = await Deno.readTextFile(latestMetricFile);\n        const lines = text.trim().split(\"\\n\");\n        if (lines.length > 1) {\n          metricsLog = \" | Last Metrics: \" + lines[lines.length - 1];\n        }\n      }\n    } catch {}\n\n    console.log(\"PING [\" + new Date().toLocaleTimeString() + \"] - Training Active (\" + minutes.toFixed(1) + \" mins elapsed)\" + metricsLog);\n  }, KEEP_ALIVE_INTERVAL_MS);\n}\n\nasync function runDiagSetup() {\n  console.log(\"=== SUTTAPLAYER ENVIRONMENT DIAGNOSTIC REPORT ===\");\n  console.log(\"Local Time: \" + new Date().toLocaleString());\n  console.log(\"Working Directory: \" + Deno.cwd());\n  console.log(\"=================================================\");\n\n  console.log(\"\\n1. Auditing Filesystem Paths...\");\n  const paths = [\n    { label: \"Drive Base Path\", path: DRIVE_BASE, required: true },\n    { label: \"Local Cache Path\", path: LOCAL_CACHE, required: true },\n    { label: \"Metadata CSV\", path: METADATA_CSV, required: true },\n    { label: \"WAVs Directory\", path: AUDIO_DIR, required: true },\n    { label: \"Phoneme Map JSON\", path: PHONEME_MAP, required: true },\n    { label: \"Base Checkpoint\", path: BASE_CKPT, required: true }\n  ];\n\n  for (const p of paths) {\n    const info = await statPath(p.path);\n    if (info) {\n      const typeStr = info.isDirectory ? \"Dir\" : \"File\";\n      const sizeStr = info.size ? \" (\" + (info.size / (1024 * 1024)).toFixed(2) + \" MB)\" : \"\";\n      console.log(\"  [OK]   \" + p.label.padEnd(25) + \" | Present: \" + p.path + \" (\" + typeStr + sizeStr + \")\");\n    } else {\n      const statusStr = p.required ? \"[MISSING - REQUIRED]\" : \"[MISSING - OPTIONAL]\";\n      console.log(\"  [FAIL] \" + p.label.padEnd(25) + \" | \" + statusStr + \": \" + p.path);\n    }\n  }\n\n  console.log(\"\\n2. Auditing System Binaries...\");\n  const binaries = [\"tmux\", \"rsync\", \"inotify-tools\", \"git\", \"python3\", \"apt-get\"];\n  for (const bin of binaries) {\n    try {\n      const command = new Deno.Command(\"which\", { args: [bin] });\n      const { code, stdout } = await command.output();\n      if (code === 0) {\n        const path = new TextDecoder().decode(stdout).trim();\n        console.log(\"  [OK]   \" + bin.padEnd(25) + \" | Installed at: \" + path);\n      } else {\n        console.log(\"  [FAIL] \" + bin.padEnd(25) + \" | Missing from system PATH\");\n      }\n    } catch {\n      console.log(\"  [FAIL] \" + bin.padEnd(25) + \" | Audit command failed\");\n    }\n  }\n\n  console.log(\"\\n3. Auditing Micromamba & Python Environments...\");\n  const mambaExist = await Deno.stat(\"bin/micromamba\").then(() => true).catch(() => false);\n  console.log(\"  [OK]   \" + \"micromamba Binary\".padEnd(25) + \" | \" + (mambaExist ? \"Installed in bin/micromamba\" : \"Missing\"));\n\n  const envExist = await Deno.stat(\"/root/micromamba/envs/py311\").then(() => true).catch(() => false);\n  console.log(\"  [OK]   \" + \"py311 Virtual Env\".padEnd(25) + \" | \" + (envExist ? \"Established in /root/micromamba/envs/py311\" : \"Missing\"));\n\n  console.log(\"=================================================\");\n}\n\nasync function runPipeline() {\n  if (isDiagSetup) {\n    await runDiagSetup();\n    return;\n  }\n\n  if (args.includes(\"--init\")) {\n    await verifyDependencies();\n    await installSystemTools();\n    await installPythonEnv();\n    await cloneRepo();\n  } else if (args.includes(\"--train\")) {\n    await setupLocalCache();\n    await startTrainingSession();\n  } else if (args.includes(\"--monitor\")) {\n    monitorCheckpoints();\n    startKeepAliveLoop();\n  } else {\n    console.log(\"SuttaPlayer Training Manager (v5)\");\n    console.log(\"Usage: deno run --allow-all sutta-training-manager-v5.ts [--init | --train | --monitor] [--dry-run] [--diag-setup]\");\n  }\n}\n\nrunPipeline().catch((err) => {\n  console.error(\"FATAL ERROR running automated manager:\", err);\n  Deno.exit(1);\n});\n
+      const startTmux = new Deno.Command("tmux", {
+        args: ["new-session", "-d", "-s", "piper_train", "bash", scriptPath]
+      });
+      await startTmux.output();
+      console.log("🎉 Training successfully launched in tmux session 'piper_train'!");
+    } else {
+      console.log("⚠️ A tmux session named 'piper_train' is already running. Monitoring active training.");
+    }
+  }
+}
+
+async function monitorCheckpoints() {
+  console.log("🔄 Checkpoint Sync daemon active. Scanning for new checkpoint iterations...");
+  if (isDryRun) {
+    console.log("[DRY-RUN] Would initiate checkpoint polling interval (rsync " + LOCAL_LOGS + "/ -> " + DRIVE_CKPTS + "/)");
+    return;
+  }
+  
+  setInterval(async () => {
+    try {
+      const logsExist = await Deno.stat(LOCAL_LOGS).then(() => true).catch(() => false);
+      if (!logsExist) return;
+
+      const cmd = new Deno.Command("rsync", {
+        args: [
+          "-av",
+          "--include=*/",
+          "--include=*.ckpt",
+          "--exclude=*",
+          LOCAL_LOGS + "/",
+          DRIVE_CKPTS + "/"
+        ]
+      });
+      const { code } = await cmd.output();
+      if (code === 0) {
+        const findCmd = new Deno.Command("find", {
+          args: [LOCAL_LOGS, "-name", "*.ckpt", "-mmin", "-2"]
+        });
+        const out = await findCmd.output();
+        const latest = new TextDecoder().decode(out.stdout).trim();
+        if (latest) {
+          console.log("✨ [Drive Sync] Newly calculated checkpoints synchronized to Drive:\n  " + latest);
+        }
+      }
+    } catch (err) {
+      console.error("Error running checkpoint rsync loop:", err);
+    }
+  }, CHECKPOINT_MONITOR_INTERVAL_MS);
+}
+
+function startKeepAliveLoop() {
+  console.log("💓 Keep-alive loop activated. Suppressing socket timeouts...");
+  if (isDryRun) {
+    console.log("[DRY-RUN] Would initiate keep-alive polling interval.");
+    return;
+  }
+  let ticks = 0;
+  setInterval(async () => {
+    ticks++;
+    const minutes = (ticks * KEEP_ALIVE_INTERVAL_MS) / 60000;
+    
+    let metricsLog = "";
+    try {
+      const latestMetricFile = "/content/piper_cache/lightning_logs/version_0/metrics.csv";
+      const fileInfo = await Deno.stat(latestMetricFile);
+      if (fileInfo.isFile) {
+        const text = await Deno.readTextFile(latestMetricFile);
+        const lines = text.trim().split("\n");
+        if (lines.length > 1) {
+          metricsLog = " | Last Metrics: " + lines[lines.length - 1];
+        }
+      }
+    } catch {}
+
+    console.log("PING [" + new Date().toLocaleTimeString() + "] - Training Active (" + minutes.toFixed(1) + " mins elapsed)" + metricsLog);
+  }, KEEP_ALIVE_INTERVAL_MS);
+}
+
+async function runDiagSetup() {
+  console.log("=== SUTTAPLAYER ENVIRONMENT DIAGNOSTIC REPORT ===");
+  console.log("Local Time: " + new Date().toLocaleString());
+  console.log("Working Directory: " + Deno.cwd());
+  console.log("=================================================");
+
+  console.log("\n1. Auditing Filesystem Paths...");
+  const paths = [
+    { label: "Drive Base Path", path: DRIVE_BASE, required: true },
+    { label: "Local Cache Path", path: LOCAL_CACHE, required: true },
+    { label: "Metadata CSV", path: METADATA_CSV, required: true },
+    { label: "WAVs Directory", path: AUDIO_DIR, required: true },
+    { label: "Phoneme Map JSON", path: PHONEME_MAP, required: true },
+    { label: "Base Checkpoint", path: BASE_CKPT, required: true }
+  ];
+
+  for (const p of paths) {
+    const info = await statPath(p.path);
+    if (info) {
+      const typeStr = info.isDirectory ? "Dir" : "File";
+      const sizeStr = info.size ? " (" + (info.size / (1024 * 1024)).toFixed(2) + " MB)" : "";
+      console.log("  [OK]   " + p.label.padEnd(25) + " | Present: " + p.path + " (" + typeStr + sizeStr + ")");
+    } else {
+      const statusStr = p.required ? "[MISSING - REQUIRED]" : "[MISSING - OPTIONAL]";
+      console.log("  [FAIL] " + p.label.padEnd(25) + " | " + statusStr + ": " + p.path);
+    }
+  }
+
+  console.log("\n2. Auditing System Binaries...");
+  const binaries = ["tmux", "rsync", "inotify-tools", "git", "python3", "apt-get"];
+  for (const bin of binaries) {
+    try {
+      const command = new Deno.Command("which", { args: [bin] });
+      const { code, stdout } = await command.output();
+      if (code === 0) {
+        const path = new TextDecoder().decode(stdout).trim();
+        console.log("  [OK]   " + bin.padEnd(25) + " | Installed at: " + path);
+      } else {
+        console.log("  [FAIL] " + bin.padEnd(25) + " | Missing from system PATH");
+      }
+    } catch {
+      console.log("  [FAIL] " + bin.padEnd(25) + " | Audit command failed");
+    }
+  }
+
+  console.log("\n3. Auditing Micromamba & Python Environments...");
+  const mambaExist = await Deno.stat("bin/micromamba").then(() => true).catch(() => false);
+  console.log("  [OK]   " + "micromamba Binary".padEnd(25) + " | " + (mambaExist ? "Installed in bin/micromamba" : "Missing"));
+
+  const envExist = await Deno.stat("/root/micromamba/envs/py311").then(() => true).catch(() => false);
+  console.log("  [OK]   " + "py311 Virtual Env".padEnd(25) + " | " + (envExist ? "Established in /root/micromamba/envs/py311" : "Missing"));
+
+  console.log("=================================================");
+}
+
+async function runPipeline() {
+  if (isDiagSetup) {
+    await runDiagSetup();
+    return;
+  }
+
+  if (args.includes("--init")) {
+    await verifyDependencies();
+    await installSystemTools();
+    await installPythonEnv();
+    await cloneRepo();
+  } else if (args.includes("--train")) {
+    await setupLocalCache();
+    await startTrainingSession();
+  } else if (args.includes("--monitor")) {
+    monitorCheckpoints();
+    startKeepAliveLoop();
+  } else {
+    console.log("SuttaPlayer Training Manager (v6)");
+    console.log("Usage: deno run --allow-all sutta-training-manager-v10.ts [--init | --train | --monitor] [--dry-run] [--diag-setup]");
+  }
+}
+
+runPipeline().catch((err) => {
+  console.error("FATAL ERROR running automated manager:", err);
+  Deno.exit(1);
+});
