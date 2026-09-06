@@ -1,5 +1,5 @@
 // sutta-training-manager.ts
-// Version: 14.0.0
+// Version: 13.0.0
 // Tmux-first orchestrator. CPU/GPU aware, configurable batch size, override checkpoint path.
 // keep-alive is DEPRECATED here -> use a persistent notebook cell instead.
 
@@ -7,22 +7,21 @@ import { parseArgs } from "jsr:@std/cli/parse-args";
 import { ensureDir } from "jsr:@std/fs/ensure-dir";
 import { join } from "jsr:@std/path";
 
-const VERSION = "14.0.0";
+const VERSION = "13.0.0";
 
 // === Paths ===
-const DRIVE_BASE = "/content/drive/MyDrive";
-const PIPER_TRAINING = join(DRIVE_BASE, "piper_training");
+const DRIVE_BASE = "/content/drive/MyDrive/sutta-tts-model-training";
+const PIPER_TRAINING = "/content/drive/MyDrive/piper_training";
 const LOCAL_CACHE = "/content/piper_cache";
 const REPO_DIR = "/content/piper1-gpl";
-const METADATA_CSV = join(DRIVE_BASE, "sutta-tts-model-training/corpus-preperation/metadata-phonemes.csv");
-const PHONEME_MAP = join(DRIVE_BASE, "sutta-tts-model-training/config/en[gb]_pi[si]-suttaplayer-phoneme-map.json");
+const METADATA_CSV = join(DRIVE_BASE, "/corpus-preperation/metadata-phonemes.csv");
+const PHONEME_MAP = join(DRIVE_BASE, "/config/en[gb]_pi[si]-suttaplayer-phoneme-map.json");
 const AUDIO_DIR = join(PIPER_TRAINING, "wavs");
 const DEFAULT_BASE_CKPT = join(PIPER_TRAINING, "en_GB-northern_english_male-medium.ckpt");
 const LOCAL_LOGS = join(REPO_DIR, "lightning_logs");
 const DRIVE_CKPTS = join(PIPER_TRAINING, "checkpoints");
 
 const VOICE_NAME = "en_gb-suttaplayer-medium"; // FIXED per your instruction
-const VOICE_CONFIG = join(PIPER_TRAINING, `${VOICE_NAME}.json`);
 
 // === Configurable defaults ===
 const DEFAULT_BATCH_GPU = 8;   // dropped from 32 to avoid OOM on Colab GPU
@@ -172,8 +171,8 @@ python3 -m piper.train fit \\
   --data.audio_dir "${AUDIO_DIR}" \\
   --model.sample_rate 22050 \\
   --data.espeak_voice "en-gb" \\
-  --data.cache_dir "${LOCAL_CACHE}" \\
-  --data.config_path "${VOICE_CONFIG}" \\
+  --data.cache_dir "${LOCAL_CACHE}/cache" \\
+  --data.config_path "${LOCAL_CACHE}/config.json" \\
   --data.batch_size ${batchSize} \\
   ${accel} \\
   --trainer.callbacks.class_path "train_sutta_voice.SuttaVoiceUatCallback" \\
@@ -220,8 +219,8 @@ async function startTrainingSession(tmuxMode = true) {
 
 // === Restores ===
 async function pipRestore() {
-  const req = join(DRIVE_BASE, "piper_env_requirements.txt");
-  const json = join(DRIVE_BASE, "piper_env_pip_list.json");
+  const req = "/content/drive/MyDrive/piper_env_requirements.txt";
+  const json = "/content/drive/MyDrive/piper_env_pip_list.json";
 
   // Check if JSON exists (the "Exact" backup)
   if (await statPath(json)) {
@@ -249,7 +248,7 @@ for pkg in packages:
     version = pkg['version']
     # Force install exact version, ignore dependencies to prevent conflicts
     subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--force-reinstall', '--no-deps', f'{name}=={version}'])
-    print(f'  ✅ Installed {name}=={version}')
+    print(f'  ✅ Installed {{name}}=={{version}}')
 "`;
       await runCmd("bash", ["-c", cmd]);
       console.log("✅ Exact environment restored from JSON.");
@@ -267,7 +266,7 @@ for pkg in packages:
 }
 
 async function piperCacheRestore() {
-  const archive = join(DRIVE_BASE, "piper_cache.tgz");
+  const archive = "/content/drive/MyDrive/piper_cache.tgz";
   if (!await statPath(archive)) { console.error("❌ Missing:", archive); return; }
   console.log("📦 Restoring piper_cache...");
   if (!isDryRun) {
@@ -287,10 +286,7 @@ async function runDiagSetup() {
     { l: "Metadata CSV", p: METADATA_CSV, r: true },
     { l: "WAVs Dir", p: AUDIO_DIR, r: true },
     { l: "Phoneme Map", p: PHONEME_MAP, r: true },
-    { l: "Voice Config", p: VOICE_CONFIG, r: true },
     { l: "Base ckpt", p: ckptPath, r: true },
-    { l: "Pip JSON", p: join(DRIVE_BASE, "piper_env_pip_list.json"), r: false },
-    { l: "Cache TGZ", p: join(DRIVE_BASE, "piper_cache.tgz"), r: false },
   ];
   for (const p of paths) {
     const info = await statPath(p.p);
