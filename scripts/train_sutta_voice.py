@@ -121,8 +121,7 @@ class SuttaVoiceUatCallback(Callback):
                 "./phoneme_map.json",
                 "../phoneme_map.json",
                 "/content/drive/MyDrive/piper_training/phoneme_map.json",
-                "./config/en[gb]_pi[si]-suttaplayer-phoneme-map.json",
-                "./sutta-tts-model-training/config/en[gb]_pi[si]-suttaplayer-phoneme-map.json"
+                "/content/drive/MyDrive/sutta-tts-model-training/config/en[gb]_pi[si]-suttaplayer-phoneme-map.json"
             ]
             for path in possible_paths:
                 if os.path.exists(path):
