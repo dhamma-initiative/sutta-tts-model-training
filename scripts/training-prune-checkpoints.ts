@@ -5,7 +5,7 @@ import { join } from "https://deno.land/std@0.224.0/path/mod.ts";
 const flags = parseArgs(Deno.args, {
   string: ["src", "dest"],
   default: {
-    src: "/content/piper1-gpl/lightning_logs/version_0/checkpoints",
+    src: "/content/lightning_logs/version_0/checkpoints",
     dest: "/content/drive/MyDrive/piper_training/checkpoints",
   },
 });
