@@ -1,5 +1,5 @@
 // sutta-training-bootstrap.ts
-// Version: 1.1.0
+// Version: 1.1.1
 // Offline-first Environment Bootstrap Manager for SuttaPlayer.
 // Installs pre-downloaded Python wheels at disk-speed and registers pre-compiled 
 // C++/Cython alignments inside Colab's NVMe scratch space in under 30 seconds.
@@ -39,10 +39,6 @@ async function runCmd(cmd: string, args: string[], options: { cwd?: string } = {
   return status.success;
 }
 
-/**
- * Scans a directory to see if any file starting with 'core' and ending in '.so' exists.
- * This dynamically handles Python/platform compiled library naming variations.
- */
 async function hasCompiledAlign(dir: string): Promise<boolean> {
   try {
     for await (const entry of Deno.readDir(dir)) {
@@ -70,7 +66,6 @@ async function verifyPrecompiledBinaries() {
     console.warn("  ⚠️ Warning: Compiled binary bindings (.so files) are missing or named unexpectedly.");
     console.warn("  🛠️ Attempting local fast recompilation of monotonic alignment MAS...");
     
-    // Quick compile fallback if binaries were lost
     const buildScript = join(REPO_DIR, "build_monotonic_align.sh");
     if (await exists(buildScript)) {
       await runCmd("bash", [buildScript], { cwd: REPO_DIR });
@@ -87,7 +82,6 @@ async function main() {
   console.log(`   Compiled Repo: ${REPO_DIR}`);
   console.log("=================================================\n");
 
-  // Step 1: Install Python wheels offline
   if (await exists(WHEELS_DIR)) {
     console.log("📦 Step 1: Installing Python packages offline from GDrive Wheel Cache...");
     const pipArgs = [
@@ -110,13 +104,11 @@ async function main() {
     Deno.exit(1);
   }
 
-  // Step 2: Register compiled repository locally
   if (await exists(REPO_DIR)) {
     console.log("\n📦 Step 2: Registering compiled VITS repository with system Python...");
     await verifyPrecompiledBinaries();
     
-    // Link local repo in editable mode with zero dependency checks
-    const linkArgs = ["install", "--no-index", "--no-deps", "-e", REPO_DIR];
+    const linkArgs = ["install", "--no-index", "--no-deps", "--no-build-isolation", "-e", REPO_DIR];
     const linkSuccess = await runCmd("pip", linkArgs);
     if (linkSuccess) {
       console.log("  ✅ Compiled repository successfully linked.");

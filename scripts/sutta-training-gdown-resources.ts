@@ -10,12 +10,13 @@ import { join } from "https://deno.land/std@0.224.0/path/mod.ts";
 
 const flags = parseArgs(Deno.args, {
   string: ["i"],
+  boolean: ["extract"],
   alias: { i: "input" },
 });
 
 if (!flags.input) {
   console.error("❌ Error: Missing input manifest parameter.");
-  console.error("Usage: deno run --allow-all sutta-training-gdown-resources.ts -i <path-to-manifest.csv>");
+  console.error("Usage: deno run --allow-all sutta-training-gdown-resources.ts -i <path-to-manifest.csv> [--extract]");
   Deno.exit(1);
 }
 
@@ -134,7 +135,7 @@ async function main() {
     }
 
     // Auto-extract if defined and download was successful
-    if (extractTo) {
+    if (extractTo && flags.extract) {
       console.log(`📦 Decompressing ${resource} to ${extractTo}...`);
       await ensureDir(extractTo);
       
