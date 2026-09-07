@@ -1,11 +1,10 @@
 // sutta-training-bootstrap.ts
-// Version: 1.0.0
+// Version: 1.1.0
 // Offline-first Environment Bootstrap Manager for SuttaPlayer.
 // Installs pre-downloaded Python wheels at disk-speed and registers pre-compiled 
 // C++/Cython alignments inside Colab's NVMe scratch space in under 30 seconds.
 
 import { parseArgs } from "https://deno.land/std@0.224.0/cli/parse_args.ts";
-import { ensureDir } from "https://deno.land/std@0.224.0/fs/ensure_dir.ts";
 import { join } from "https://deno.land/std@0.224.0/path/mod.ts";
 
 const flags = parseArgs(Deno.args, {
@@ -28,9 +27,10 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-async function runCmd(cmd: string, args: string[]) {
+async function runCmd(cmd: string, args: string[], options: { cwd?: string } = {}) {
   const command = new Deno.Command(cmd, {
     args,
+    cwd: options.cwd,
     stdout: "inherit",
     stderr: "inherit",
   });
@@ -39,26 +39,41 @@ async function runCmd(cmd: string, args: string[]) {
   return status.success;
 }
 
+/**
+ * Scans a directory to see if any file starting with 'core' and ending in '.so' exists.
+ * This dynamically handles Python/platform compiled library naming variations.
+ */
+async function hasCompiledAlign(dir: string): Promise<boolean> {
+  try {
+    for await (const entry of Deno.readDir(dir)) {
+      if (entry.isFile && entry.name.startsWith("core") && entry.name.endsWith(".so")) {
+        return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+
 async function verifyPrecompiledBinaries() {
   console.log("🔍 Verifying compiled Cython & C++ binary modules...");
   
   const espeakBridgePath = join(REPO_DIR, "src/piper/espeakbridge.so");
-  const cythonAlignPath = join(REPO_DIR, "src/piper/train/vits/monotonic_align/core.so");
+  const cythonAlignDir = join(REPO_DIR, "src/piper/train/vits/monotonic_align");
   
   const bridgeOk = await exists(espeakBridgePath);
-  const alignOk = await exists(cythonAlignPath);
+  const alignOk = await hasCompiledAlign(cythonAlignDir);
   
   if (bridgeOk && alignOk) {
     console.log("  ✅ Pre-compiled binaries present and structurally sound.");
     return true;
   } else {
-    console.warn("  ⚠️ Warning: Compiled binary bindings (.so files) are missing.");
+    console.warn("  ⚠️ Warning: Compiled binary bindings (.so files) are missing or named unexpectedly.");
     console.warn("  🛠️ Attempting local fast recompilation of monotonic alignment MAS...");
     
     // Quick compile fallback if binaries were lost
     const buildScript = join(REPO_DIR, "build_monotonic_align.sh");
     if (await exists(buildScript)) {
-      await runCmd("bash", [buildScript]);
+      await runCmd("bash", [buildScript], { cwd: REPO_DIR });
       await runCmd("python3", ["setup.py", "build_ext", "--inplace"], { cwd: REPO_DIR });
     }
     return false;
