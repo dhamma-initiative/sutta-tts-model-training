@@ -1,5 +1,11 @@
-// training-prune-checkpoints.ts
-import { parseArgs } from "jsr:@std/cli/parse-args";
+// sutta-training-pruner.ts
+// Version: 1.0.0
+// Smart Local-First Checkpoint Pruner & Sync Daemon for SuttaPlayer.
+// 1. Analyzes and prunes weak models directly on local NVMe scratch disk (instant, zero GDrive Trash overhead).
+// 2. Synchronizes only high-tier survivors and last.ckpt up to Google Drive.
+// 3. Employs deletion mirroring on Drive so old checkpoints are replaced safely without creating trash.
+
+import { parseArgs } from "https://deno.land/std@0.224.0/cli/parse_args.ts";
 import { join } from "https://deno.land/std@0.224.0/path/mod.ts";
 
 const flags = parseArgs(Deno.args, {
@@ -14,12 +20,21 @@ const LOCAL_LOGS = flags.src;
 const DRIVE_CKPTS = flags.dest;
 const KEEP_TOP_K = 3;
 
+async function exists(path: string): Promise<boolean> {
+  try {
+    await Deno.stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Prunes checkpoints inside a specific directory.
  * Keeps only the top_k models based on val_mos (higher is better)
  * and top_k models based on val_mel (lower is better), plus last.ckpt.
  */
-async function pruneCheckpoints(dir: string, keepTopK: number) {
+async function pruneLocalCheckpoints(dir: string, keepTopK: number) {
   const parsed: Array<{ name: string; mos?: number; mel?: number }> = [];
 
   try {
@@ -38,6 +53,8 @@ async function pruneCheckpoints(dir: string, keepTopK: number) {
     return; // Directory might not exist yet during startup
   }
 
+  if (parsed.length === 0) return;
+
   const mosRanked = parsed.filter(p => p.mos !== undefined).sort((a, b) => b.mos! - a.mos!);
   const melRanked = parsed.filter(p => p.mel !== undefined).sort((a, b) => a.mel! - b.mel!);
 
@@ -48,7 +65,7 @@ async function pruneCheckpoints(dir: string, keepTopK: number) {
   for (const p of parsed.filter(p => !keep.has(p.name))) {
     try {
       await Deno.remove(join(dir, p.name));
-      console.log(`  🗑️ Local Pruned: ${p.name}`);
+      console.log(`  🗑️ NVMe Local Permanently Deleted (0 Trash Bytes): ${p.name}`);
     } catch (err) {
       console.error(`  ⚠️ Failed to prune local ${p.name}: ${err.message}`);
     }
@@ -57,15 +74,15 @@ async function pruneCheckpoints(dir: string, keepTopK: number) {
 
 /**
  * Syncs and prunes checkpoints using a Local-First sequence:
- * 1. Prune locally on volatile NVMe storage (instant, zero GDrive trash created).
+ * 1. Prunes locally on volatile NVMe storage (instant, zero GDrive trash created).
  * 2. Rsync survivors (top-3 MOS, top-3 MEL, last.ckpt) up to Google Drive.
- * 3. Use rsync's --delete flag to safely clear replaced high-tier models on GDrive.
+ * 3. Uses rsync's --delete flag to safely clear replaced high-tier models on GDrive.
  */
 async function syncAndPruneCheckpoints() {
   console.log("🔄 Running Local-Prune-First Sync Cycle...");
 
   // Step 1: Prune local volatile directory first
-  await pruneCheckpoints(LOCAL_LOGS, KEEP_TOP_K);
+  await pruneLocalCheckpoints(LOCAL_LOGS, KEEP_TOP_K);
 
   // Step 2: Sync survivors and mirror deletions to Google Drive
   // Using rsync --delete ensures old high-tier checkpoints are removed from GDrive
@@ -93,11 +110,12 @@ async function syncAndPruneCheckpoints() {
 }
 
 async function main() {
-  console.log("🚀 SuttaPlayer Checkpoint Pruner & GDrive Sync Active.");
+  console.log("=================================================");
+  console.log("🚀 SuttaPlayer Smart Checkpoint Pruner & Sync Active");
   console.log(`   Local NVMe Source: ${LOCAL_LOGS}`);
   console.log(`   GDrive Destination: ${DRIVE_CKPTS}`);
   console.log(`   Retention Strategy: Top ${KEEP_TOP_K} MOS + Top ${KEEP_TOP_K} MEL`);
-  console.log("   Press Ctrl+C to terminate.\n");
+  console.log("=================================================\n");
 
   while (true) {
     try {
