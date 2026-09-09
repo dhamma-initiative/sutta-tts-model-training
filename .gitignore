@@ -11,6 +11,9 @@ coverage/
 *.lcov
 .venv*
 
+*.ckpt
+*.onnx
+
 # Python Caches
 __pycache__/
 *.py[cod]
