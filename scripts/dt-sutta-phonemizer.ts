@@ -16,6 +16,7 @@ export class DtSuttaPhonemizer {
 
   private preProcessRegExes: Array<[RegExp, string]> = [];
   private postProcessRegExes: Array<[RegExp, string]> = [];
+  private patchProcessRegExes: Array<[RegExp, string]> = [];
   private trie: TrieNode = { children: new Map() };
 
   private dictionaryResponder?: (dictKey: string, dictUsed: number, dictVal: string) => string;
@@ -29,6 +30,7 @@ export class DtSuttaPhonemizer {
     dictionaryResponder?: (dictKey: string, dictUsed: number, dictVal: string) => string,
     preProcessRegExFindReplaceList?: string[][] | null,
     postProcessRegExFindReplList?: string[][] | null,
+    patchProcessRegExesFindReplList?: string[][] | null,
     tokenize: boolean = false,
     strictMode: boolean = false
   ) {
@@ -48,6 +50,12 @@ export class DtSuttaPhonemizer {
     }
     if (postProcessRegExFindReplList) {
       this.postProcessRegExes = postProcessRegExFindReplList.map(([find, repl, options]) => [
+        new RegExp(find, options ?? "gmiu"),
+        repl,
+      ]);
+    }
+    if (patchProcessRegExesFindReplList) {
+      this.patchProcessRegExes = patchProcessRegExesFindReplList.map(([find, repl, options]) => [
         new RegExp(find, options ?? "gmiu"),
         repl,
       ]);
@@ -159,7 +167,17 @@ public process(text: string): { phonemes: string; tokens: string[][]; ids: numbe
 
     ipaText = this.cleanUpRedundantPunctuation(ipaText);
 
+    // Force NFD normalization early so combining marks are exposed to the patch filter!
+    ipaText = ipaText.normalize("NFD");
+
+    ipaText = this.handleModelRegExReplacements(ipaText, this.patchProcessRegExes);
+
     // 5. Tokenize to IDs
+    const phoTuple = this.tokenize(ipaText);
+    return phoTuple
+  }
+
+  public processAsPhonemes(ipaText: string): { phonemes: string; tokens: string[][]; ids: number[][] } {
     return this.tokenize(ipaText);
   }
 

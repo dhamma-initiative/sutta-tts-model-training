@@ -46,7 +46,7 @@ async function downloadResource(resource: string, gdriveId: string, destPath: st
   console.log(`📥 Downloading GDrive ID: ${gdriveId} to ${destPath}...`);
   
   // Try gdown first (native Colab utility) without --confirm
-  const gdownSuccess = await runCommand("gdown", ["--id", gdriveId, "-O", destPath]);
+  const gdownSuccess = await runCommand("gdown", ["-O", destPath, gdriveId]);
   if (gdownSuccess) {
     console.log(`  ✅ gdown download completed successfully.`);
     return true;
