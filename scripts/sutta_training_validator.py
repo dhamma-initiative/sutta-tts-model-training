@@ -46,6 +46,7 @@ class PreFlightValidator:
         map_path = self.params.get("--data.phonemes_path")
         ckpt_path = self.params.get("--ckpt_path")
         failures = []
+        row_count = 0
 
         # Check A: Metadata CSV
         print("📋 1. Phonetic Metadata CSV:")
@@ -74,11 +75,11 @@ class PreFlightValidator:
                 anchors = ["0.wav", "500.wav", "999.wav"]
                 missing_anchors = [a for a in anchors if not os.path.exists(os.path.join(audio_dir, a))]
                 
-                if wav_count == 1000 and not missing_anchors:
+                if wav_count == row_count and not missing_anchors:
                     print(f"  [PASS] Found exactly {wav_count} audio files in: {audio_dir}")
                     print("  [PASS] Anchor verification successful (0.wav, 500.wav, 999.wav are online).")
                 else:
-                    failures.append(f"Audio payload error: Found {wav_count}/1000 WAVs. Missing anchors: {missing_anchors}")
+                    failures.append(f"Audio payload error: Found {wav_count}/{row_count} WAVs. Missing anchors: {missing_anchors}")
             except Exception as e:
                 failures.append(f"Audio folder list error: {e}")
         else:

@@ -15,6 +15,8 @@ except ImportError:
     import pytorch_lightning as pl
     from pytorch_lightning.callbacks import Callback
 
+from lightning.pytorch.callbacks import Callback, ModelCheckpoint
+
 # =========================================================================
 # SUTTAPLAYER UAT VERIFICATION PROBES
 # =========================================================================
@@ -114,29 +116,21 @@ class SuttaVoiceUatCallback(Callback):
             self.phoneme_to_id = json.load(f)
 
     def on_fit_start(self, trainer, pl_module):
-        """Dumps all bound hyperparameters and model configuration parameters to stdout."""
+        # 1. Automatically retarget ModelCheckpoint away from val_mos
+        for cb in trainer.callbacks:
+            if isinstance(cb, ModelCheckpoint) and cb.monitor == "val_mos":
+                cb.monitor = "val_mel"
+                cb.mode = "min"
+                print("\n💡 [SuttaVoiceUatCallback] Retargeted ModelCheckpoint monitor: 'val_mos' -> 'val_mel' (mode='min')\n")
+
+        # 2. Existing hyperparameter dump...
         print("\n" + "="*70)
-        print("          PYTORCH LIGHTNING MODEL HYPERPARAMETERS DUMP          ")
+        print("          ACTIVE VITS TRAINING HYPERPARAMETERS          ")
         print("="*70)
-        
-        # Dump hparams registered inside LightningModule
-        if hasattr(pl_module, "hparams"):
-            print("[hparams]:")
-            for k, v in dict(pl_module.hparams).items():
-                print(f"  {k}: {v}")
-                
-        # Check specific loss parameters on VITS model
-        print("\n[VITS Loss Coefficients]:")
-        for attr in ["c_mel", "c_kl", "c_dur", "loss_dur_scale"]:
-            if hasattr(pl_module, attr):
-                print(f"  pl_module.{attr} = {getattr(pl_module, attr)}")
-            elif hasattr(pl_module, "model_g") and hasattr(pl_module.model_g, attr):
-                print(f"  pl_module.model_g.{attr} = {getattr(pl_module.model_g, attr)}")
-                
+        for attr in ["c_mel", "c_kl", "c_dur"]:
+            val = getattr(pl_module, attr, None) or getattr(getattr(pl_module, "model_g", None), attr, "N/A")
+            print(f"  {attr}: {val}")
         print("="*70 + "\n")
-        
-        # Initial check for graceful stop file on startup
-        self.check_graceful_stop(trainer)
 
     def phonemes_to_ids(self, phoneme_str):
         ids = []

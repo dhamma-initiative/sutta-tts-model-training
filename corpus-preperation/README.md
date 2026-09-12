@@ -221,3 +221,30 @@ Once you have completed the swaps and assembled your final 1,000 utterances, **p
 ***
 
 📊 **Whenever you are ready, paste your final lines or the compiled CSV text, and we will run the final sanity checks before launching your Google Colab instance!**
+
+
+
+
+---
+
+we have completed our final qa work on the audio wav files. i am requesting the removal of the following due to redundancy:
+
+```csv metadata-text.csv
+328.wav|[Similarly with the second, third, & fourth jhānas.]
+329.wav|[Similarly with the second, third, and fourth jhānas.]
+
+456.wav|When one has attained the fourth jhāna, in-and-out breaths [bodily fabrications] have ceased.
+457.wav|When one has attained the fourth jhāna, in-&-out breaths [bodily fabrications] have ceased.
+
+483.wav|There is the case where a monk—quite secluded from sensuality, secluded from unskillful qualities—enters & remains in the first jhāna:
+484.wav|There is the case where a monk—quite secluded from sensuality, secluded from unskillful qualities—enters and remains in the first jhāna:
+```
+```json 2.phonemize-sources-for-tts-config.json[-piper]
+    "preProcessRegExFindReplaceList": [
+        ["&", "and"],
+
+```
+
+given, the above configuration will be applied for piper training phonemization, the [329, 457 & 484] are essentially duplicated in the dataset.
+
+agree?
