@@ -1,0 +1,45 @@
+{
+    "notes:": [
+        "this config was used with 2.phonemize-sources-for-tts.ts & 3.corpus-build-review.ts to build the colab corpus for piper training",
+        "the vits key differencec between this & the .vits config, is that vits is used to create the correct synthetic audio and this sets up training using updates ipa tables & preserves as much sutta punctuation as possible."
+    ],
+    "is_debug_mode": false,
+    
+    "ext_to_process": ".piper",
+    "text_suttas_root": "tts.train/corpus/colab/en-gb_pisi-suttaplayer-medium-vits2023-dataset",
+    "transform_text_suttas_root": "tts.train/corpus/colab/en-gb_pisi-suttaplayer-medium-vits2023-dataset",
+    "phoneme_id_map.notes": [
+        "the suttaplayer piper1 model will move to a en-gb espeak lang with the phoneme_id_map from northern_english_male",
+        "extending https://huggingface.co/datasets/rhasspy/piper-checkpoints/resolve/main/en/en_GB/northern_english_male/medium/config.json"
+    ],
+    "phoneme_id_map": "tts.model/en[gb]_pi[si]-suttaplayer-phoneme-map.json",
+    "english_ipa_map": "tts.word-lists/pho_en[gb]-to-espeak-v1.51-ipa.json",
+    "pali_ipa_map": "tts.word-lists/pho_pi[si]-to-aksharamukha-2.1.0-ipa.json",
+    "save_as_json": false,
+    "tokenize": true,    
+    "strict_mode": true,
+
+    "preProcessRegExFindReplaceList": [
+        ["&", "and"],
+        ["(DHAMMAPADA|ITIVUTTAKA|KHUDDAKAPĀṬHA)", "$1."],
+        ["(SUTTA NIPĀTA|THERAGĀTHĀ|THERĪGĀTHĀ|UDĀNA)\\s+([:\\d]+)", "$1. $2."],
+        ["\\s+((AṄGUTTARA|DĪGHA|MAJJHIMA|SAṀYUTTA)\\s+NIKĀYA)", ". $1."],
+        ["\\bblessed(\\s+one)\\b", "bless'ed$1", "gmiu"],
+        [
+            "\\b(in|past|their|future|previous|former|in|of|their|entire|the)\\s+lives\\b", 
+            "$1 lyves",
+            "gmiu"
+        ]
+    ],
+    "postProcessRegExFindReplList": [
+    ],
+    "patchProcessRegExFindReplList": [
+        ["[\\u200d\\u200c\\u0307\\u0303\\u0361\\u0067]", "", "gu"],
+        ["^(?=\\S)", " ", "gm"]
+    ],
+    "dictionaryResponder": {
+        "customPhonemes": {
+        }
+    },
+    "write_to_disk": true
+}
