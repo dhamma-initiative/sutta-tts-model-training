@@ -34,7 +34,7 @@
     "postProcessRegExFindReplList": [
     ],
     "patchProcessRegExFindReplList": [
-        ["[\\u200d\\u200c\\u0307\\u0303\\u0361\\u0067]", "", "gu"],
+        ["[\\u200d\\u200c\\u0307\\u0303\\u0361]", "", "gu"],
         ["^(?=\\S)", " ", "gm"]
     ],
     "dictionaryResponder": {

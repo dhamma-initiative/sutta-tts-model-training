@@ -90,7 +90,7 @@ def main():
     parser.add_argument("-e", "--english_dict", default="./config/pho_en[gb]-to-espeak-v1.51-ipa.json", help="Path to English dictionary")
     parser.add_argument("-pi", "--pali_dict", default="./config/pho_pi[si]-to-aksharamukha-2.1.0-ipa.json", help="Path to Pali dictionary")
     parser.add_argument("-c", "--corpus_raw", default="./corpus-preperation/metadata-text-utt-only.piper", help="Path to raw corpus")
-    parser.add_argument("-cc", "--corpus_clean", default="./corpus-preperation/metadata-phoneme-utt-only.piper", help="Path to cleaned reference corpus")
+    parser.add_argument("-cc", "--corpus_clean", default="./corpus-preperation/metadata-text-utt-only.piper.cleaned", help="Path to cleaned reference corpus")
     
     args = parser.parse_args()
 
